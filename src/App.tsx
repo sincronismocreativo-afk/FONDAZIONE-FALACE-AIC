@@ -40,10 +40,11 @@ import PatternConnector from './components/PatternConnector.js';
 import TheoryAIC from './components/TheoryAIC.js';
 import TheoryAICUnifiedField from './components/TheoryAICUnifiedField.js';
 import ZenodoPaper from './components/ZenodoPaper.js';
+import ArchivioAicSito from './components/ArchivioAicSito.js';
 
 import { Sparkles, Library, FileText, Layers, ShieldCheck, X } from 'lucide-react';
 
-type MainTab = 'institution' | 'departments' | 'patents' | 'catalog' | 'heritage' | 'music_lab' | 'documentaries' | 'library' | 'cern_zenodo';
+type MainTab = 'institution' | 'departments' | 'patents' | 'catalog' | 'heritage' | 'music_lab' | 'documentaries' | 'library' | 'cern_zenodo' | 'archivio_aic';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>('institution');
@@ -152,6 +153,12 @@ export default function App() {
           {activeTab === 'library' && (
             <div className="space-y-10 animate-fade-in">
               <BibliotecaDigitale />
+            </div>
+          )}
+
+          {activeTab === 'archivio_aic' && (
+            <div className="space-y-10 animate-fade-in">
+              <ArchivioAicSito />
             </div>
           )}
 

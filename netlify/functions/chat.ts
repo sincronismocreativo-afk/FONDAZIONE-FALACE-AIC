@@ -1,39 +1,11 @@
-import express from "express";
-import path from "path";
-import dotenv from "dotenv";
-import { createServer as createViteServer } from "vite";
+import { Handler } from "@netlify/functions";
 import { GoogleGenAI } from "@google/genai";
-import { BOOKS_CATALOG, INVENTIONS_CATALOG, ARTWORKS_CATALOG, TV_DOC_SHOWS, DOCUMENTARY_SERIES_EPISODES, FOUNDATION_METADATA, SYNCHRONICITY_THEORY } from "./src/data/archiveData.js";
-import { BIOGRAFIA_PAGES } from "./src/data/biografiaPdfData.js";
-import { ARCHIVIO_STORICO_PAGES } from "./src/data/archivioStoricoPdf.js";
+import { BIOGRAFIA_PAGES } from "../../src/data/biografiaPdfData.js";
+import { ARCHIVIO_STORICO_PAGES } from "../../src/data/archivioStoricoPdf.js";
+import { FOUNDATION_METADATA } from "../../src/data/archiveData.js";
 
-dotenv.config();
-
-const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-
-app.use(express.json());
-
-// Initialize Gemini safely
-let ai: GoogleGenAI | null = null;
-const api_key = process.env.GEMINI_API_KEY;
-
-if (api_key) {
-  ai = new GoogleGenAI({
-    apiKey: api_key,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    }
-  });
-} else {
-  console.log("WARN: GEMINI_API_KEY is not defined. AI Assistant won't generate responses.");
-}
-
-// System Instruction summarizing the entire XML structure of the Fondazione Falace
 const systemInstruction = `Sei l'Laudato e Rigoroso Assistente Scientifico Accademico della Fondazione Falace delle AIC (FALACE FOUNDATION for AIC DEVELOPMENT). 
-Il tuo ruolo è rispondere con rigorosa accuratezza accademica, scientifice e filosofica alle domande dei visitatori e dei ricercatori sul patrimonio del Fondatore, Dott. Luca Falace.
+Il tuo ruolo è rispondere con rigorosa accuratezza accademica, scientifica e filosofica alle domande dei visitatori e dei ricercatori sul patrimonio del Fondatore, Dott. Luca Falace.
 
 Usa un tono colto, istituzionale, elegante, accogliente e preciso. Esprimiti prevalentemente in italiano (la lingua madre del fondatore), ma rispondi volentieri in inglese o altre lingue se vieni interrogato in tali lingue.
 
@@ -79,23 +51,22 @@ LA SCALA DEI 9 LIVELLI DI SINCRONICITÀ INDOTTE (FALACE, VOL. III):
 - L9 Creativa Non-dualità (Gamma + 51.625 GHz DNA + 7 Hz, Interemisferica > 90%, RMSSD > 75 ms stabile): S(Δt) = φ(f, t_0 ± Δt). Funzione: non-dualità operativa (retrocausalità).
 
 LA TRILOGIA DEL CAMPO UNIFICATO AIC-EC (CERN ZENODO 2025):
-- Volume I: \"Teoria Generale del Sincronismo Creativo e Teoria del Campo Unificato AIC\"
+- Volume I: "Teoria Generale del Sincronismo Creativo e Teoria del Campo Unificato AIC"
   Modellazione e Applicazione della Sincronicità Intenzionale attraverso il Sistema AIC-Sync©. Published: 9 August 2025. 482 pp. ISBN-13: 979-8297277984. DOI: 10.5281/zenodo.17080308.
-- Volume II: \"Teoria del Campo Unificato: Trattato sull'Energia Creativa\"
+- Volume II: "Teoria del Campo Unificato: Trattato sull'Energia Creativa"
   Trattato sugli Effetti della Coscienza nei Campi Elettromagnetici, Quantistici e Gravitazionali. Published: 19 August 2025. 295 pp. ISBN-13: 979-8298903042. DOI: 10.5281/zenodo.17041593.
-- Brevetto AIC-SYNC: \"Generare le Sincronicità\"
+- Brevetto AIC-SYNC: "Generare le Sincronicità"
   Primo sistema al mondo per sincronicità indotte e monitoraggio dei picchi creativi (EEG, HRV, Frequenze Herziane). DOI: 10.5281/zenodo.17793651.
-- Volume III: \"Interazione Psicofisica con il Campo Unificato\"
+- Volume III: "Interazione Psicofisica con il Campo Unificato"
   I Nove Livelli della Sincronicità nella Teoria del Sincronismo Creativo – Nuova classificazione della sincronicità. DOI: 10.5281/zenodo.20414984.
 
 ALTRI CONTRIBUTI DEL FONDATORE:
 - Insegnamento: Docenza in Storia dell'Arte dal 2005 al 2016 in 4 prestigiosi istituti privati (Newton, Jervolino, Futura, Nobel).
-- Invenzioni ed Ecologia: Brevetto GeniusOm \"Zero Waste\" (ITNA20130029A1, ha vinto Ecomondo 2014, ricevuto investimento di €250k a Sgark Tank, andato su RAI2). Brevetto Eco-Tuta Termodinamica Climatizzata (IT201800003616U1, donata nel 2020 contro il contagio virus COVID-19).
+- Invenzioni ed Ecologia: Brevetto GeniusOm "Zero Waste" (ITNA20130029A1, ha vinto Ecomondo 2014, ricevuto investimento di €250k a Sgark Tank, andato su RAI2). Brevetto Eco-Tuta Termodinamica Climatizzata (IT201800003616U1, donata nel 2020 contro il contagio virus COVID-19).
 - Museo Internazionale della Pizza Partenopea (M.I.P.): Ideato, scritto e fondato da Luca Falace nel 2013 con 30 pannelli antropologici (Riconosciuto patrimonio UNESCO).
 
 Mantieni un comportamento dignitoso, fiero ed eccezionalmente accurato nelle tue risposte sul Sincronismo Creativo e sul Campo Unificato, citando sempre formule e concetti con precisione accademica.`;
 
-// Helper to score and retrieve relevant pages from the comprehensive text archives in depth
 function getMatchingArchivePages(queryText: string) {
   const cleanQuery = queryText.toLowerCase();
   const words = cleanQuery
@@ -114,7 +85,7 @@ function getMatchingArchivePages(queryText: string) {
       if (cleanContent.includes(w)) {
         score += 1.5;
         const count = cleanContent.split(w).length - 1;
-        score += count * 0.3; // Extra weight for recurring terms
+        score += count * 0.3;
       }
     });
     if (score > 0) {
@@ -137,27 +108,56 @@ function getMatchingArchivePages(queryText: string) {
     }
   });
 
-  // Sort by score descending and take up to top 4 relevant pages
   return results.sort((a, b) => b.score - a.score).slice(0, 4);
 }
 
-// API route for Chat
-app.post("/api/chat", async (req, res) => {
-  const { messages } = req.body;
-
-  if (!ai) {
-    return res.status(500).json({ 
-      error: "AI Config missing", 
-      text: "L'Assistente Scientifico non è configurato momentaneamente nel server. Verifica che la chiave di Gemini sia impostata nei Segreti." 
-    });
+export const handler: Handler = async (event, context) => {
+  // Handle preflight OPTIONS request
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+      },
+      body: "",
+    };
   }
 
-  if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: "Missing messages body" });
+  if (event.httpMethod !== "POST") {
+    return {
+      statusCode: 405,
+      headers: { "Access-Control-Allow-Origin": "*" },
+      body: "Method Not Allowed",
+    };
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    return {
+      statusCode: 500,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        error: "Missing API Key",
+        text: "La sintonizzazione AI non è configurata nell'ambiente di hosting Netlify. Configura la chiave 'GEMINI_API_KEY' nelle impostazioni ambientali del tuo pannello Netlify per attivare l'assistente online.",
+      }),
+    };
   }
 
   try {
-    // Perform dynamic Retrieval of relevant book/biography pages based on the last message
+    const { messages } = JSON.parse(event.body || "{}");
+    if (!messages || !Array.isArray(messages)) {
+      return {
+        statusCode: 400,
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({ error: "Missing messages array" }),
+      };
+    }
+
     const lastUserMessage = messages[messages.length - 1];
     const userQuery = lastUserMessage?.content || "";
     const matchedPages = getMatchingArchivePages(userQuery);
@@ -178,14 +178,14 @@ ${retrievedContext}
 ================================================================================`;
     }
 
-    // Map the messages natively to the structure expected by the modern @google/genai SDK
-    const contents = messages.map(msg => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content }]
+    const ai = new GoogleGenAI({ apiKey });
+    const contents = messages.map((msg: any) => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.content }],
     }));
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: contents,
       config: {
         systemInstruction: activeSystemInstruction,
@@ -194,42 +194,27 @@ ${retrievedContext}
     });
 
     const text = response.text || "Nessun chiarimento riscontrato. Si prega di riprovare.";
-    res.json({ text });
+
+    return {
+      statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ text }),
+    };
   } catch (err: any) {
-    console.error("Gemini request failed:", err);
-    res.status(500).json({ 
-      error: err.message || "Request failed",
-      text: "La chiamata scientifica ha riscontrato un'eccezione temporanea. Riprova tra pochi istanti." 
-    });
+    console.error("Netlify function Gemini request failed:", err);
+    return {
+      statusCode: 500,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        error: err.message || "Request failed",
+        text: "La chiamata scientifica ha riscontrato un'eccezione temporanea. Riprova tra pochi istanti.",
+      }),
+    };
   }
-});
-
-// Serve health status
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "Fondazione Falace Resource Engine", hasAi: !!ai });
-});
-
-// Configure Vite or Static server
-async function configureServer() {
-  if (process.env.NODE_ENV !== "production") {
-    // Vite Dev Server
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    // Production Static Asset delivery
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Fondazione Falace Portal listening on http://localhost:${PORT}`);
-  });
-}
-
-configureServer();
+};

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FOUNDATION_METADATA } from '../data/archiveData.js';
 import { Menu, X, BookOpen, Cpu, Palette, Tv, Radio, Sparkles, PhoneCall, Layers, ShieldCheck, ChevronRight } from 'lucide-react';
 
-type MainTab = 'institution' | 'departments' | 'patents' | 'catalog' | 'heritage' | 'music_lab' | 'documentaries' | 'library' | 'cern_zenodo';
+type MainTab = 'institution' | 'departments' | 'patents' | 'catalog' | 'heritage' | 'music_lab' | 'documentaries' | 'library' | 'cern_zenodo' | 'archivio_aic';
 
 interface NavbarProps {
   activeTab: MainTab;
@@ -16,6 +16,7 @@ const workspaceTabs = [
   { id: 'patents' as const, label: 'La Teoria & Invenzioni' },
   { id: 'catalog' as const, label: 'Catalogo SBN & Opere' },
   { id: 'cern_zenodo' as const, label: 'Depositi CERN Zenodo' },
+  { id: 'archivio_aic' as const, label: 'ARCHIVIO PRECEDENTE FONDAZIONE AIC' },
   { id: 'heritage' as const, label: 'Archivio di Famiglia' },
   { id: 'music_lab' as const, label: 'Sintonia Hertziana' },
   { id: 'library' as const, label: 'Biblioteca Digitale' },

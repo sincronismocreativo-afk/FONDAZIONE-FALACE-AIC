@@ -1,6 +1,7 @@
 import React from 'react';
 import { FOUNDATION_METADATA } from '../data/archiveData.js';
-import { Landmark, ShieldCheck, Mail, Globe, MapPin, Scale } from 'lucide-react';
+import { Landmark, ShieldCheck, Mail, Globe, MapPin, Scale, Database } from 'lucide-react';
+import { downloadBackupXml, downloadSiteBlueprint, downloadSiteBlueprintTxt } from '../utils/exportData.js';
 
 export default function Footer() {
   return (
@@ -88,7 +89,34 @@ export default function Footer() {
         {/* Bottom sector: standard disclaimer bar */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 text-[10px] font-mono text-white">
           
-          <div></div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={downloadBackupXml}
+              className="px-3 py-1 bg-white/5 hover:bg-white/12 border border-white/10 rounded font-mono text-[9px] uppercase tracking-wider text-white/70 hover:text-white transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              title="Scarica il database completo del sito in formato HTML strutturato, compatibile con Microsoft Excel"
+            >
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse border border-emerald-300"></span>
+              <span>Esporta Database (HTML / Excel)</span>
+            </button>
+
+            <button
+              onClick={downloadSiteBlueprintTxt}
+              className="px-3 py-1 bg-white/5 hover:bg-white/12 border border-white/10 rounded font-mono text-[9px] uppercase tracking-wider text-white/70 hover:text-white transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              title="Scarica tutti i codici sorgente del sito in formato piano .TXT (100% compatibile per Gemini, ChatGPT, Claude senza limiti di formato)"
+            >
+              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse border border-amber-300"></span>
+              <span>Esporta Codici (.TXT Universale AI)</span>
+            </button>
+
+            <button
+              onClick={downloadSiteBlueprint}
+              className="px-3 py-1 bg-white/5 hover:bg-white/12 border border-white/10 rounded font-mono text-[9px] uppercase tracking-wider text-white/70 hover:text-white transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              title="Scarica l'intera struttura in file JSON leggibile per importazioni dirette"
+            >
+              <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-pulse border border-sky-300"></span>
+              <span>Esporta Struttura (.JSON)</span>
+            </button>
+          </div>
 
           <div className="text-center md:text-right space-y-1">
             <span className="block uppercase tracking-wider text-[8.5px] text-white font-black">
