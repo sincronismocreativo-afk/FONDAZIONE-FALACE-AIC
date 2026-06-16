@@ -1,7 +1,7 @@
 import React from 'react';
 import { FOUNDATION_METADATA } from '../data/archiveData.js';
 import { Landmark, ShieldCheck, Mail, Globe, MapPin, Scale, Database } from 'lucide-react';
-import { downloadBackupXml, downloadSiteBlueprint, downloadSiteBlueprintTxt } from '../utils/exportData.js';
+import { downloadBackupXml, downloadSiteBlueprint, downloadSiteBlueprintTxt, downloadBackupXmlReal } from '../utils/exportData.js';
 
 export default function Footer() {
   return (
@@ -115,6 +115,15 @@ export default function Footer() {
             >
               <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-pulse border border-sky-300"></span>
               <span>Esporta Struttura (.JSON)</span>
+            </button>
+
+            <button
+              onClick={downloadBackupXmlReal}
+              className="px-3 py-1 bg-white/5 hover:bg-white/12 border border-white/10 rounded font-mono text-[9px] uppercase tracking-wider text-white/70 hover:text-white transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              title="Scarica l'intero database della Fondazione Falace in formato XML puro per analisi strutturale"
+            >
+              <span className="w-1.5 h-1.5 bg-rose-400 rounded-full animate-pulse border border-rose-300"></span>
+              <span>Esporta Database (.XML)</span>
             </button>
           </div>
 

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { 
   History, ShieldCheck, Sparkles, Database, FileText, CheckCircle, 
   ArrowRight, Layers, BookOpen, Users, Video, Award, GraduationCap, 
-  Scale, Brain, Search, Info, ExternalLink, HelpCircle, Eye, EyeOff
+  Scale, Brain, Search, Info, ExternalLink, HelpCircle, Eye, EyeOff,
+  Download
 } from 'lucide-react';
 import AicDocPlayer from './AicDocPlayer';
 
@@ -34,6 +35,126 @@ export default function ArchivioAicSito() {
   // Gestore per i link fittizi o reali del vecchio sito
   const handleExternalLink = (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  // Funzione per scaricare l'intero archivio storico in formato XML
+  const handleDownloadXml = () => {
+    const escapeXml = (unsafe: string): string => {
+      return unsafe
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    };
+
+    let xmlOutput = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xmlOutput += `<fondazione_aic>\n`;
+    
+    // Metadata
+    xmlOutput += `  <metadata>\n`;
+    xmlOutput += `    <denominazione_it>FALACE FOUNDATION FOR AIC DEVELOPMENT - FONDAZIONE FALACE PER LE ATTIVITA’ INTELLETTIVE CREATIVE</denominazione_it>\n`;
+    xmlOutput += `    <denominazione_en>FALACE FOUNDATION FOR AIC DEVELOPMENT</denominazione_en>\n`;
+    xmlOutput += `    <fondatore>Dott. Luca Falace</fondatore>\n`;
+    xmlOutput += `    <email>dott.lucafalace@gmail.com</email>\n`;
+    xmlOutput += `    <codice_ateco>94.99.10 - Attività di organizzazioni per la tutela dei cittadini</codice_ateco>\n`;
+    xmlOutput += `    <scopo_istituzionale>La Fondazione si occupa della tutela, della formazione, della promozione delle Attività Creative Intellettuali, principalmente nei settori delle Arti e delle Scienze.</scopo_istituzionale>\n`;
+    xmlOutput += `    <deposito_siae>ARCHIVIO SIAE OLAF COD. 05-07</deposito_siae>\n`;
+    xmlOutput += `  </metadata>\n\n`;
+
+    // 1. Archive sezioni
+    xmlOutput += `  <archivio_sezioni>\n`;
+    xmlOutput += `    <sezione id="benvenuto">\n`;
+    xmlOutput += `      <titolo>DOCUMENTI ATTO E STATUTO - BUSINESS MODEL</titolo>\n`;
+    xmlOutput += `      <sottotitolo>Benvenuto sul nostro Sito Privato della Fondazione Culturale AIC</sottotitolo>\n`;
+    xmlOutput += `      <categoria>fondativi</categoria>\n`;
+    xmlOutput += `      <contenuto_testuale>La Fondazione si occupa della tutela, della formazione, della promozione delle Attività Creative Intellettuali, principalmente nei settori delle Arti e delle Scienze. Essa non ha scopo di lucro e non può distribuire utili; è apolitica ed apartitica. Rifiuta discriminazioni di sesso, etnia, lingua e religione.</contenuto_testuale>\n`;
+    xmlOutput += `    </sezione>\n`;
+    
+    xmlOutput += `    <sezione id="progetto_sede">\n`;
+    xmlOutput += `      <titolo>PROGETTO SEDE &amp; LAYOUT INTERNI 3D</titolo>\n`;
+    xmlOutput += `      <sottotitolo>Raffigurazione degli interni e rendering 3D delle sale di studio della Fondazione</sottotitolo>\n`;
+    xmlOutput += `      <categoria>fondativi</categoria>\n`;
+    xmlOutput += `      <contenuto_testuale>Raffigurazione degli interni e rendering 3D delle sale di studio della Fondazione. Planimetria, interni ed estetici della sede con parquet ed illuminazione a LED progettati dal Dott. Luca Falace.</contenuto_testuale>\n`;
+    xmlOutput += `    </sezione>\n`;
+
+    xmlOutput += `    <sezione id="origini">\n`;
+    xmlOutput += `      <titolo>LE ORIGINI E IL SINCRONISMO CREATIVO</titolo>\n`;
+    xmlOutput += `      <sottotitolo>Il superamento attivo della Sincronicità di Carl Gustav Jung</sottotitolo>\n`;
+    xmlOutput += `      <categoria>teoria</categoria>\n`;
+    xmlOutput += `      <contenuto_testuale>Il Sincronismo Creativo si configura come un passo successivo e propedeutico alla teoria junghiana, ampliando la sincronicità in un contesto attivo: l'individuo, attraverso l'attivazione della propria creatività e l'uso conscio delle Attività Intellettive Creative (AIC), partecipa alla manifestazione cosciente degli eventi significativi. I 5 Principi Cardinali del Metodo Sincronico includono: Osservazione e Documentazione, Consapevolezza Creativa, Armonizzazione con l'Energia Celeste, Integrazione Psiche, Fisica e Metafisica, Applicazione Pratica.</contenuto_testuale>\n`;
+    xmlOutput += `    </sezione>\n`;
+
+    xmlOutput += `    <sezione id="statuto_atto">\n`;
+    xmlOutput += `      <titolo>ESTRATTI ATTO NOTARILE &amp; STATUTO</titolo>\n`;
+    xmlOutput += `      <sottotitolo>La stesura ufficiale del settembre 2024 registrata presso il Notaio</sottotitolo>\n`;
+    xmlOutput += `      <categoria>documenti</categoria>\n`;
+    xmlOutput += `      <contenuto_testuale>Estratto Atto Notarile Statuto Articolo 20: La presidenza onoraria della Fondazione è conferita al Dott. Luca Falace sua vita natural durante e senza altro adempimento da operarsi, per l'iniziativa, l'impegno, la divulgazione del Metodo del Sincronismo Creativo di cui è ideatore nonché la dedizione sin dalla sua istituzione.</contenuto_testuale>\n`;
+    xmlOutput += `    </sezione>\n`;
+
+    xmlOutput += `    <sezione id="didattica">\n`;
+    xmlOutput += `      <titolo>LE ATTIVITÀ DIDATTICHE E ACCADEMICHE</titolo>\n`;
+    xmlOutput += `      <sottotitolo>Il Manifesto dei 40 Corsi Formativi descritto nello Statuto</sottotitolo>\n`;
+    xmlOutput += `      <categoria>documenti</categoria>\n`;
+    xmlOutput += `      <contenuto_testuale>Il Manifesto formativo descritto nello Statuto comprende i 40 corsi formativi ufficiali e accademici per le capacità dell'ingegno d'adulti ed allievi.</contenuto_testuale>\n`;
+    xmlOutput += `    </sezione>\n`;
+
+    xmlOutput += `    <sezione id="cineteca">\n`;
+    xmlOutput += `      <titolo>CINETECA PRIVATA &amp; DOCUMENTARI</titolo>\n`;
+    xmlOutput += `      <sottotitolo>Registro Storico di 13 Video e rassegne originali di Luca Falace</sottotitolo>\n`;
+    xmlOutput += `      <categoria>media</categoria>\n`;
+    xmlOutput += `      <contenuto_testuale>La videoteca privata contiene 13 documentari e video montati e scritti interamente da Luca Falace dedicati alle capacità cognitive ed energetiche.</contenuto_testuale>\n`;
+    xmlOutput += `    </sezione>\n`;
+
+    xmlOutput += `    <sezione id="membri">\n`;
+    xmlOutput += `      <titolo>IL REGISTRO DEI MEMBRI DELLA FONDAZIONE</titolo>\n`;
+    xmlOutput += `      <sottotitolo>Il coordinamento attivo di oltre 100 associati del 2023-2024</sottotitolo>\n`;
+    xmlOutput += `      <categoria>fondativi</categoria>\n`;
+    xmlOutput += `      <contenuto_testuale>Nel corso delle fases preparatorie del 2023, la Fondazione AIC ha coordinato un club di circa 110-130 amici e sostenitori attivi, uniti nel promuovere il potenziamento dei picchi creativi e delle meditazioni.</contenuto_testuale>\n`;
+    xmlOutput += `    </sezione>\n`;
+
+    xmlOutput += `    <sezione id="patrimonio">\n`;
+    xmlOutput += `      <titolo>IL PATRIMONIO FONDATIVO &amp; PERIZIE stima</titolo>\n`;
+    xmlOutput += `      <sottotitolo>La classificazione del fondo artistico stimato e depositato</sottotitolo>\n`;
+    xmlOutput += `      <categoria>fondativi</categoria>\n`;
+    xmlOutput += `      <contenuto_testuale>Il patrimonio della fondazione comprende la perizia di stima delle opere d'arte valutata professionalmente e depositata presso il Notaio.</contenuto_testuale>\n`;
+    xmlOutput += `    </sezione>\n`;
+    xmlOutput += `  </archivio_sezioni>\n\n`;
+
+    // 2. Corsi formatted
+    xmlOutput += `  <corsi_didattici>\n`;
+    corsiDidattici.forEach(corso => {
+      xmlOutput += `    <corso numero="${corso.num}">\n`;
+      xmlOutput += `      <categoria>${escapeXml(corso.cat)}</categoria>\n`;
+      xmlOutput += `      <titolo>${escapeXml(corso.title)}</titolo>\n`;
+      xmlOutput += `      <descrizione>${escapeXml(corso.desc)}</descrizione>\n`;
+      xmlOutput += `    </corso>\n`;
+    });
+    xmlOutput += `  </corsi_didattici>\n\n`;
+
+    // 3. Documentaries formatted
+    xmlOutput += `  <cineteca>\n`;
+    videoCineteca.forEach(v => {
+      xmlOutput += `    <documentario numero="${v.num}">\n`;
+      xmlOutput += `      <titolo>${escapeXml(v.title)}</titolo>\n`;
+      xmlOutput += `      <durata>${escapeXml(v.dur)}</durata>\n`;
+      xmlOutput += `      <tipo>${escapeXml(v.type)}</tipo>\n`;
+      xmlOutput += `      <descrizione>${escapeXml(v.desc)}</descrizione>\n`;
+      xmlOutput += `      <url>${escapeXml(v.url)}</url>\n`;
+      xmlOutput += `    </documentario>\n`;
+    });
+    xmlOutput += `  </cineteca>\n`;
+
+    xmlOutput += `</fondazione_aic>\n`;
+
+    const blob = new Blob([xmlOutput], { type: 'application/xml;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'fondazione_aic_archivio_completo.xml');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -852,7 +973,6 @@ export default function ArchivioAicSito() {
               </p>
               <ul className="list-disc pl-5 mt-2 space-y-0.5 text-slate-500 font-mono text-[9.5px]">
                 <li>Instagram: @montecarloarts (Free Support)</li>
-                <li>Instagram: @movementnewliberalarts (Union of Artists)</li>
                 <li>Email Contatto: dott.lucafalace@gmail.com</li>
               </ul>
             </div>
@@ -1129,6 +1249,20 @@ export default function ArchivioAicSito() {
               <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 shrink-0 ml-2" />
             </a>
           ))}
+          {/* Pulsante di download XML */}
+          <button
+            onClick={handleDownloadXml}
+            className="p-3 border-2 border-dashed border-[#0066CC] bg-blue-50/30 hover:bg-blue-50 hover:border-solid hover:border-[#0066CC] transition-all flex items-center justify-between group duration-200 cursor-pointer text-left w-full h-full"
+            title="Scarica l'intero archivio della fondazione AIC in formato XML"
+          >
+            <div className="flex items-center gap-2">
+              <Database className="w-3.5 h-3.5 text-[#0066CC] shrink-0" />
+              <span className="font-mono text-xs text-[#0066CC] font-bold uppercase tracking-wider">
+                Scarica intero sito (XML)
+              </span>
+            </div>
+            <Download className="w-4 h-4 text-[#0066CC] group-hover:translate-y-0.5 transition-transform shrink-0" />
+          </button>
         </div>
       </div>
 

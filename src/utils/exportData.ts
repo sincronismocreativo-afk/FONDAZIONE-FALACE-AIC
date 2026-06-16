@@ -440,3 +440,124 @@ Each file is presented inside clear headers below.
     alert("Errore durante la generazione del pacchetto di clonazione in formato testo.");
   }
 }
+
+export function downloadBackupXmlReal() {
+  const escapeXml = (unsafe: string | number | undefined | boolean): string => {
+    if (unsafe === undefined || unsafe === null) return '';
+    const str = String(unsafe);
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  };
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<fondazione_falace_database>\n`;
+  xml += `  <exported_at>${new Date().toISOString()}</exported_at>\n\n`;
+
+  // 1. Metadata
+  xml += `  <metadata>\n`;
+  xml += `    <denomination_it>${escapeXml(FOUNDATION_METADATA.denomination_it)}</denomination_it>\n`;
+  xml += `    <denomination_en>${escapeXml(FOUNDATION_METADATA.denomination_en)}</denomination_en>\n`;
+  xml += `    <founder>${escapeXml(FOUNDATION_METADATA.founder)}</founder>\n`;
+  xml += `    <email>${escapeXml(FOUNDATION_METADATA.email)}</email>\n`;
+  xml += `    <ateco_code>${escapeXml(FOUNDATION_METADATA.ateco_code)}</ateco_code>\n`;
+  xml += `    <ateco_desc_it>${escapeXml(FOUNDATION_METADATA.ateco_desc_it)}</ateco_desc_it>\n`;
+  xml += `    <legal_backing>\n`;
+  xml += `      <mic_mibac>${escapeXml(FOUNDATION_METADATA.legal_backing.mic_mibac)}</mic_mibac>\n`;
+  xml += `      <uibm>${escapeXml(FOUNDATION_METADATA.legal_backing.uibm)}</uibm>\n`;
+  xml += `      <opac_sbn>${escapeXml(FOUNDATION_METADATA.legal_backing.opac_sbn)}</opac_sbn>\n`;
+  xml += `      <zenodo_cern_doi>${escapeXml(FOUNDATION_METADATA.legal_backing.zenodo_cern_doi)}</zenodo_cern_doi>\n`;
+  xml += `      <dds_discoteca>${escapeXml(FOUNDATION_METADATA.legal_backing.dds_discoteca)}</dds_discoteca>\n`;
+  xml += `      <museo_maxxi>${escapeXml(FOUNDATION_METADATA.legal_backing.museo_maxxi)}</museo_maxxi>\n`;
+  xml += `    </legal_backing>\n`;
+  xml += `  </metadata>\n\n`;
+
+  // 2. Books
+  xml += `  <libri_monografie>\n`;
+  BOOKS_CATALOG.forEach(book => {
+    xml += `    <libro id="${escapeXml(book.id)}">\n`;
+    xml += `      <titolo>${escapeXml(book.title)}</titolo>\n`;
+    xml += `      <anno>${book.year}</anno>\n`;
+    xml += `      <editore>${escapeXml(book.publisher)}</editore>\n`;
+    xml += `      <isbn>${book.isbn ? escapeXml(book.isbn) : ''}</isbn>\n`;
+    xml += `      <sbn_code>${book.sbnCode ? escapeXml(book.sbnCode) : ''}</sbn_code>\n`;
+    xml += `      <tipo>${escapeXml(book.type)}</tipo>\n`;
+    xml += `      <descrizione>${escapeXml(book.description)}</descrizione>\n`;
+    xml += `    </libro>\n`;
+  });
+  xml += `  </libri_monografie>\n\n`;
+
+  // 3. Inventions
+  xml += `  <brevetti_uibm>\n`;
+  INVENTIONS_CATALOG.forEach(inv => {
+    xml += `    <brevetto numero="${escapeXml(inv.number)}">\n`;
+    xml += `      <titolo>${escapeXml(inv.title)}</titolo>\n`;
+    xml += `      <anno>${inv.year}</anno>\n`;
+    xml += `      <deposito_codice>${escapeXml(inv.patentNum || '')}</deposito_codice>\n`;
+    xml += `      <stato>${escapeXml(inv.status)}</stato>\n`;
+    xml += `      <descrizione>${escapeXml(inv.description)}</descrizione>\n`;
+    xml += `      <dettagli>${escapeXml(inv.details)}</dettagli>\n`;
+    xml += `    </brevetto>\n`;
+  });
+  xml += `  </brevetti_uibm>\n\n`;
+
+  // 4. Artworks
+  xml += `  <opere_arte_siae>\n`;
+  ARTWORKS_CATALOG.forEach(art => {
+    xml += `    <opera id="${escapeXml(art.id)}">\n`;
+    xml += `      <titolo>${escapeXml(art.title)}</titolo>\n`;
+    xml += `      <anno>${art.year}</anno>\n`;
+    xml += `      <categoria>${escapeXml(art.category)}</categoria>\n`;
+    xml += `      <collocazione>${escapeXml(art.venue)}</collocazione>\n`;
+    xml += `      <descrizione>${escapeXml(art.description)}</descrizione>\n`;
+    xml += `    </opera>\n`;
+  });
+  xml += `  </opere_arte_siae>\n\n`;
+
+  // 5. TV & Documentaries
+  xml += `  <documentari_video>\n`;
+  TV_DOC_SHOWS.forEach(ep => {
+    xml += `    <documentario numero="${ep.num}">\n`;
+    xml += `      <titolo>${escapeXml(ep.title)}</titolo>\n`;
+    xml += `      <anno>${ep.year}</anno>\n`;
+    xml += `      <tematiche>${escapeXml(ep.topics)}</tematiche>\n`;
+    xml += `      <descrizione>${escapeXml(ep.description)}</descrizione>\n`;
+    xml += `    </documentario>\n`;
+  });
+  xml += `  </documentari_video>\n\n`;
+
+  // 6. Family heritage
+  xml += `  <archivio_famiglia>\n`;
+  LUCIO_FALACE_PATENTS.forEach(pat => {
+    xml += `    <brevetto_lucio_padre>\n`;
+    xml += `      <titolo>${escapeXml(pat.title)}</titolo>\n`;
+    xml += `      <anno>${pat.year}</anno>\n`;
+    xml += `      <codice>${escapeXml(pat.code)}</codice>\n`;
+    xml += `      <ufficio>${escapeXml(pat.office)}</ufficio>\n`;
+    xml += `    </brevetto_lucio_padre>\n`;
+  });
+  PAOLO_FALACE_WORKS.forEach(w => {
+    xml += `    <opera_paolo_fratello>\n`;
+    xml += `      <titolo>${escapeXml(w.title)}</titolo>\n`;
+    xml += `      <anno>${escapeXml(w.year)}</anno>\n`;
+    xml += `      <tipo>${escapeXml(w.type)}</tipo>\n`;
+    xml += `      <dettagli>${escapeXml(w.details)}</dettagli>\n`;
+    xml += `    </opera_paolo_fratello>\n`;
+  });
+  xml += `  </archivio_famiglia>\n`;
+
+  xml += `</fondazione_falace_database>\n`;
+
+  const blob = new Blob([xml], { type: 'application/xml;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'database_fondazione_falace_backup.xml';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
