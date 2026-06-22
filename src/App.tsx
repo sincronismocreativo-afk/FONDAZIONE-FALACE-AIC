@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar.js';
 import Header from './components/Header.js';
 import AiAssistant from './components/AiAssistant.js';
@@ -42,14 +42,171 @@ import TheoryAICUnifiedField from './components/TheoryAICUnifiedField.js';
 import ZenodoPaper from './components/ZenodoPaper.js';
 import ArchivioAicSito from './components/ArchivioAicSito.js';
 
-import { Sparkles, Library, FileText, Layers, ShieldCheck, X } from 'lucide-react';
+import { auth, db } from './utils/firebase.js';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import AuthModal from './components/AuthModal.js';
+
+import { Sparkles, Library, FileText, Layers, ShieldCheck, X, Save, Clock } from 'lucide-react';
 
 type MainTab = 'institution' | 'departments' | 'patents' | 'catalog' | 'heritage' | 'music_lab' | 'documentaries' | 'library' | 'cern_zenodo' | 'archivio_aic';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<MainTab>('institution');
-  const [selectedBookForAi, setSelectedBookForAi] = useState<string | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<MainTab>(() => {
+    const saved = localStorage.getItem('aic_active_tab');
+    return (saved as MainTab) || 'institution';
+  });
+  const [selectedBookForAi, setSelectedBookForAi] = useState<string | null>(() => {
+    return localStorage.getItem('aic_selected_book') || null;
+  });
+  const [isChatOpen, setIsChatOpen] = useState(() => {
+    return localStorage.getItem('aic_chat_open') === 'true';
+  });
+
+  // Autosave UI status states
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [showSaveNotification, setShowSaveNotification] = useState(false);
+  const [saveReason, setSaveReason] = useState<'periodic' | 'inactivity' | null>(null);
+  
+  // Custom Firebase Authentication & Sincronizzazione states
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [cloudSynced, setCloudSynced] = useState(false);
+
+  // Monitor Authentication Session State changed
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        try {
+          const docRef = doc(db, 'users', user.uid, 'states', 'current');
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.activeTab) {
+              setActiveTab(data.activeTab as MainTab);
+            }
+            if (data.selectedBookForAi !== undefined) {
+              setSelectedBookForAi(data.selectedBookForAi);
+            }
+            if (data.isChatOpen !== undefined) {
+              setIsChatOpen(data.isChatOpen);
+            }
+            console.log("Stato ripristinato dal Cloud Firebase.");
+          }
+        } catch (error) {
+          console.warn("Recupero stato iniziale da Database ignorato/off-line:", error);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const lastActiveRef = useRef<number>(Date.now());
+  const stateRef = useRef({ activeTab, selectedBookForAi, isChatOpen });
+
+  // Keep state sync ref updated to prevent resetting timers on state modifications
+  useEffect(() => {
+    stateRef.current = { activeTab, selectedBookForAi, isChatOpen };
+  }, [activeTab, selectedBookForAi, isChatOpen]);
+
+  // Track user interactive activities to monitor precise idle times
+  useEffect(() => {
+    const handleActivity = () => {
+      lastActiveRef.current = Date.now();
+    };
+
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('click', handleActivity);
+    window.addEventListener('scroll', handleActivity);
+
+    return () => {
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('click', handleActivity);
+      window.removeEventListener('scroll', handleActivity);
+    };
+  }, []);
+
+  const saveStateInstance = async (reason: 'periodic' | 'inactivity') => {
+    const { activeTab: currentTab, selectedBookForAi: currentBook, isChatOpen: chatOpen } = stateRef.current;
+    
+    // Save to LocalStorage
+    localStorage.setItem('aic_active_tab', currentTab);
+    localStorage.setItem('aic_selected_book', currentBook || '');
+    localStorage.setItem('aic_chat_open', chatOpen ? 'true' : 'false');
+    
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    // Async synchronization to cloud if logged in
+    let isCloudSaved = false;
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        const docRef = doc(db, 'users', user.uid, 'states', 'current');
+        await setDoc(docRef, {
+          activeTab: currentTab,
+          selectedBookForAi: currentBook,
+          isChatOpen: chatOpen,
+          updatedAt: now.toISOString()
+        });
+        isCloudSaved = true;
+      } catch (error) {
+        console.error("Firebase Sync-Error:", error);
+      }
+    }
+
+    setLastSaved(timeString);
+    setSaveReason(reason);
+    setCloudSynced(isCloudSaved);
+    setShowSaveNotification(true);
+    
+    const timeoutId = setTimeout(() => {
+      setShowSaveNotification(false);
+    }, 4500);
+    
+    return timeoutId;
+  };
+
+  // Automated core logic: save periodically (every 2 minutes) or saved on inactivity (after 45s of no raw activity)
+  useEffect(() => {
+    let lastSavedTime = Date.now();
+    let isInactiveSaved = false;
+    let toastTimer: any = null;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const idleTime = now - lastActiveRef.current;
+      const timeSinceLastSave = now - lastSavedTime;
+
+      // 1. Periodic autosave every 2 minutes (120000 ms)
+      if (timeSinceLastSave >= 120000) {
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = saveStateInstance('periodic');
+        lastSavedTime = now;
+        isInactiveSaved = false;
+      }
+      // 2. Inactivity autosave after 45 seconds of continuous idle time
+      else if (idleTime >= 45000 && !isInactiveSaved) {
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = saveStateInstance('inactivity');
+        isInactiveSaved = true;
+        lastSavedTime = now;
+      }
+
+      // Reset inactivity save gate if the user becomes active again
+      if (idleTime < 45000) {
+        isInactiveSaved = false;
+      }
+    }, 5000); // Check loop running every 5 seconds
+
+    return () => {
+      clearInterval(interval);
+      if (toastTimer) clearTimeout(toastTimer);
+    };
+  }, []);
 
   const handleAskAboutBook = (bookTitle: string) => {
     setSelectedBookForAi(bookTitle);
@@ -59,7 +216,14 @@ export default function App() {
   return (
     <div className="min-h-screen bg-white text-black flex flex-col justify-between selection:bg-white selection:text-black font-sans antialiased">
       {/* 0. Sticky Top Navigation Bar */}
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} onOpenAiChat={() => setIsChatOpen(true)} />
+      <Navbar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onOpenAiChat={() => setIsChatOpen(true)} 
+        currentUser={currentUser}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onLogout={() => signOut(auth)}
+      />
 
       {/* 1. Header Hero Panel with dynamic name label mapping */}
       <HomeSection activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -253,6 +417,26 @@ export default function App() {
           </span>
         </button>
       </div>
+
+      {/* Elegant floating autosave notification in bottom-left */}
+      {showSaveNotification && (
+        <div className="fixed bottom-6 left-6 z-50 bg-[#003b71] text-white border border-white/20 shadow-2xl px-4 py-3 flex items-center gap-3 animate-fade-in font-mono text-[11px] rounded-xs select-none">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${saveReason === 'inactivity' ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${saveReason === 'inactivity' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+          </span>
+          <div className="flex flex-col">
+            <span className="font-extrabold tracking-wider uppercase text-white leading-none">
+              {saveReason === 'inactivity' ? 'Inattività Rilevata' : 'Salvataggio Automatico'}
+            </span>
+            <span className="text-[10px] text-white/80 mt-1 leading-none">
+              Stato sintonizzato {cloudSynced ? 'sul Cloud' : 'localmente'} alle {lastSaved}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </div>
   );
 }

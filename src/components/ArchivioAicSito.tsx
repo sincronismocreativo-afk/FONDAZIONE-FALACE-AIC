@@ -276,6 +276,54 @@ export default function ArchivioAicSito() {
       )
     },
     {
+      id: 'sintesi_progetto_originario',
+      title: 'SINTESI PROGETTO ORIGINARIO (VOLUME III)',
+      subtitle: 'Il testo originale riassunto del vecchio progetto originario (Pagg. 102 - 124 Integrali)',
+      icon: <BookOpen className="w-5 h-5 text-amber-700" />,
+      category: 'fondativi',
+      content: (
+        <div className="space-y-6 text-xs text-slate-800 leading-relaxed font-sans">
+          <div className="border-l-4 border-amber-600 bg-amber-50 p-4 text-slate-900">
+            <strong className="font-serif uppercase text-amber-950 tracking-wider text-xs block mb-1">COMPENDIO COMPLETO DEL PROGETTO ORIGINARIO (SINTESI)</strong>
+            <p className="italic leading-normal text-[11.5px]">
+              Questo volume rappresenta la sintesi integrale del faldone originario con tutte le rielaborazioni, l'esperienza virtuale del ventennio, i registri del Ministero ed i depositi SIAE 2005. Contiene il compendio completo del Sincronismo Creativo e le attitudini di impresa.
+            </p>
+          </div>
+
+          <div className="bg-blue-50/50 border-l-4 border-[#0066CC] p-4 text-xs text-slate-850 leading-relaxed font-sans">
+            <p className="font-serif italic font-bold text-sm mb-1 text-black font-semibold text-black">Lettore del compendio storiografico (Pagg. 102 - 124 in pdf sfogliabile)</p>
+            Sfoglia di seguito le pagine registrate del manoscritto originale. Puoi navigare tra i capitoli usando l'indice o caricare il PDF integrale.
+          </div>
+
+          <AicDocPlayer documentId="sintesi" />
+        </div>
+      )
+    },
+    {
+      id: 'libro_notaio',
+      title: 'IL LIBRO DEPOSITATO DAL NOTAIO (PRE-ATTO)',
+      subtitle: 'La stesura originale fondante dell\'opera stesa da Luca Falace depositata prima delle firme (127 Pagg.)',
+      icon: <BookOpen className="w-5 h-5 text-rose-700" />,
+      category: 'fondativi',
+      content: (
+        <div className="space-y-6 text-xs text-slate-800 leading-relaxed font-sans">
+          <div className="border-l-4 border-rose-600 bg-rose-50 p-4 text-slate-900">
+            <strong className="font-serif uppercase text-rose-950 tracking-wider text-xs block mb-1">ATTO INTEGRALE DELLA FONDAZIONE AIC - 127 PAGINE</strong>
+            <p className="italic leading-normal text-[11.5px]">
+              Questo è il vero documento originale costitutivo di 127 pagine redatto personalmente dal Dott. Luca Falace e depositato ufficialmente prima della stipula pubblica. Costituisce la base legale, statutaria e teorica di tutto il compendio "Arti e Scienze".
+            </p>
+          </div>
+
+          <div className="bg-emerald-50/50 border-l-4 border-emerald-600 p-4 text-xs text-slate-850 leading-relaxed font-sans">
+            <p className="font-serif italic font-bold text-sm mb-1 text-black font-semibold text-black">Lettore Immersivo Atto Notarile (Visualizzatore PDF Ufficiale attivo)</p>
+            Sfoglia l'Atto originale della Fondazione. Per attivare l'intera scansione di 127 pagine e sfogliarla pagina per pagina ad alta fedeltà, carichi il file PDF nativo cliccando su "Carica PDF Vero" sul pannello a comparsa.
+          </div>
+
+          <AicDocPlayer documentId="notaio" />
+        </div>
+      )
+    },
+    {
       id: 'progetto_sede',
       title: 'PROGETTO SEDE & LAYOUT INTERNI 3D',
       subtitle: 'Raffigurazione degli interni e rendering 3D delle sale di studio della Fondazione',

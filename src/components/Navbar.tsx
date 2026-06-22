@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { FOUNDATION_METADATA } from '../data/archiveData.js';
-import { Menu, X, BookOpen, Cpu, Palette, Tv, Radio, Sparkles, PhoneCall, Layers, ShieldCheck, ChevronRight } from 'lucide-react';
+import { 
+  Menu, 
+  X, 
+  BookOpen, 
+  Cpu, 
+  Palette, 
+  Tv, 
+  Radio, 
+  Sparkles, 
+  PhoneCall, 
+  Layers, 
+  ShieldCheck, 
+  ChevronRight,
+  Cloud,
+  LogOut,
+  User
+} from 'lucide-react';
 
 type MainTab = 'institution' | 'departments' | 'patents' | 'catalog' | 'heritage' | 'music_lab' | 'documentaries' | 'library' | 'cern_zenodo' | 'archivio_aic';
 
@@ -8,6 +24,9 @@ interface NavbarProps {
   activeTab: MainTab;
   setActiveTab: (tab: MainTab) => void;
   onOpenAiChat?: () => void;
+  currentUser: any;
+  onOpenAuth: () => void;
+  onLogout: () => void;
 }
 
 const workspaceTabs = [
@@ -23,7 +42,7 @@ const workspaceTabs = [
   { id: 'documentaries' as const, label: 'Archivio Documentari' },
 ];
 
-export default function Navbar({ activeTab, setActiveTab, onOpenAiChat }: NavbarProps) {
+export default function Navbar({ activeTab, setActiveTab, onOpenAiChat, currentUser, onOpenAuth, onLogout }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -158,7 +177,7 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAiChat }: Navbar
             })}
           </div>
 
-          {/* Institutional Contact Button */}
+          {/* Institutional Contact & Auth Buttons */}
           <div className="hidden md:flex items-center gap-3">
             <a
               href={`mailto:${FOUNDATION_METADATA.email}`}
@@ -167,6 +186,32 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAiChat }: Navbar
               <PhoneCall className="w-3.5 h-3.5" />
               <span>Contatto SBN</span>
             </a>
+
+            {currentUser ? (
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-800 text-[9.5px] font-mono uppercase tracking-wider px-3.5 py-2">
+                  <Cloud className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                  <span className="truncate max-w-[120px]" title={currentUser.email}>
+                    {currentUser.email}
+                  </span>
+                </div>
+                <button
+                  onClick={onLogout}
+                  className="bg-red-600 hover:bg-black text-white text-[9.5px] font-mono uppercase tracking-wider px-3.5 py-2 transition-colors cursor-pointer"
+                  title="Disconnetti account"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onOpenAuth}
+                className="inline-flex items-center gap-2 bg-[#00468C] hover:bg-black text-white text-[10px] font-mono uppercase tracking-widest px-4 py-2 transition-all duration-200 active:scale-95 cursor-pointer"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Cloud Sync / Accedi</span>
+              </button>
+            )}
           </div>
 
           {/* Mobile menu toggle */}
@@ -203,6 +248,42 @@ export default function Navbar({ activeTab, setActiveTab, onOpenAiChat }: Navbar
                 </button>
               );
             })}
+
+            {/* Mobile Auth options */}
+            <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+              <div className="text-[9px] font-mono text-black font-bold uppercase tracking-widest pb-2">
+                Sincronizzazione Cloud
+              </div>
+              {currentUser ? (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-[10.5px] font-mono text-emerald-800 p-3 bg-emerald-50">
+                    <Cloud className="w-4 h-4 text-emerald-600 animate-pulse animate-duration-1000" />
+                    <span>Attivo: {currentUser.email}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsOpen(false);
+                      onLogout();
+                    }}
+                    className="flex items-center justify-center gap-2 w-full p-3 bg-red-600 hover:bg-black text-white text-[10.5px] font-mono font-bold uppercase tracking-widest cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Disconnetti</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    onOpenAuth();
+                  }}
+                  className="flex items-center justify-center gap-2 w-full p-3 bg-[#00468C] hover:bg-black text-white text-[10.5px] font-mono font-bold uppercase tracking-widest cursor-pointer"
+                >
+                  <User className="w-4 h-4" />
+                  <span>Configura Cloud Sync</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
       </nav>

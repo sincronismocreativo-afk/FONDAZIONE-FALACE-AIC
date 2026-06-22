@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, 
   ZoomIn, ZoomOut, RotateCcw, Search, BookOpen, ShieldCheck, 
-  Download, Printer, Maximize2, Minimize2, CheckCircle2, Bookmark, Info, HelpCircle, GraduationCap
+  Download, Printer, Maximize2, Minimize2, CheckCircle2, Bookmark, Info, HelpCircle, GraduationCap,
+  Upload, Trash2, Check, AlertCircle
 } from 'lucide-react';
+import { storePDF, getPDF, deletePDF } from '../utils/pdfStorage';
 
 interface DocumentPage {
   pageNumber: number;
@@ -21,7 +23,7 @@ interface DocumentData {
 }
 
 interface AicDocPlayerProps {
-  documentId: 'sviluppo' | 'sede' | 'corsi' | 'carteggio';
+  documentId: 'sviluppo' | 'sede' | 'corsi' | 'carteggio' | 'notaio' | 'sintesi';
 }
 
 export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
@@ -31,6 +33,102 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showIndex, setShowIndex] = useState<boolean>(true);
   const [searchAlert, setSearchQueryAlert] = useState<string>('');
+
+  // Sincronizzazione con file PDF reali e autentici (IndexedDB e server statically served)
+  const [hasStoredPdf, setHasStoredPdf] = useState<boolean>(false);
+  const [hasServerPdf, setHasServerPdf] = useState<boolean>(false);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Forza il controllo dello stato a ogni caricamento/cambio del documentId
+  useEffect(() => {
+    checkPdfStatus();
+  }, [documentId]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfUrl && pdfUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+    };
+  }, [pdfUrl]);
+
+  const checkPdfStatus = async () => {
+    // 1. Controlla IndexedDB locale
+    try {
+      const stored = await getPDF(documentId);
+      setHasStoredPdf(!!stored);
+      if (stored) {
+        if (pdfUrl && pdfUrl.startsWith('blob:')) URL.revokeObjectURL(pdfUrl);
+        setPdfUrl(URL.createObjectURL(stored));
+        return;
+      }
+    } catch (e) {
+      console.error("Errore controllo IndexedDB:", e);
+      setHasStoredPdf(false);
+    }
+
+    // 2. Controlla se il file esiste sul server (es: /sviluppo.pdf)
+    try {
+      const response = await fetch(`/${documentId}.pdf`, { method: 'HEAD' });
+      const contentType = response.headers.get('content-type') || '';
+      if (response.ok && contentType.toLowerCase().includes('application/pdf')) {
+        setHasServerPdf(true);
+        setPdfUrl(`/${documentId}.pdf`);
+      } else {
+        setHasServerPdf(false);
+        setPdfUrl(null);
+      }
+    } catch {
+      setHasServerPdf(false);
+      setPdfUrl(null);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      setUploadMessage({ type: 'error', text: 'Seleziona esclusivamente un file PDF originale.' });
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadMessage(null);
+
+    try {
+      await storePDF(documentId, file);
+      setHasStoredPdf(true);
+      setUploadMessage({ type: 'success', text: `File "${file.name}" archiviato nell'app con successo!` });
+      // Ricarica per visualizzare immediatamente
+      await checkPdfStatus();
+      setTimeout(() => setUploadMessage(null), 5000);
+    } catch (err: any) {
+      setUploadMessage({ type: 'error', text: `Errore durante il caricamento: ${err.message}` });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeletePDF = async () => {
+    if (window.confirm('Rimuovere il PDF originale caricato localmente? Rivisiterai la replica testuale.')) {
+      try {
+        await deletePDF(documentId);
+        setHasStoredPdf(false);
+        if (pdfUrl && pdfUrl.startsWith('blob:')) URL.revokeObjectURL(pdfUrl);
+        setPdfUrl(null);
+        setUploadMessage({ type: 'success', text: 'Documento locale rimosso con successo.' });
+        await checkPdfStatus();
+        setTimeout(() => setUploadMessage(null), 3000);
+      } catch (err: any) {
+        setUploadMessage({ type: 'error', text: `Errore: ${err.message}` });
+      }
+    }
+  };
+
 
   // 1. Dati Documento 1: Progetto Sviluppo Fondazione AIC
   const docSviluppo: DocumentData = {
@@ -43,7 +141,7 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
       { title: 'Business Plan e Finanza Sociale', page: 2 },
       { title: 'Articolo 2 (Scopo & Didattica)', page: 3 },
       { title: 'Articolo 20 (Direzione e Onorari)', page: 4 },
-      { title: 'Normativa e Statuto del Terzo Settore', page: 5 }
+      { title: 'Fondazioni Classiche e Codice Civile', page: 5 }
     ],
     pages: [
       {
@@ -148,29 +246,29 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
       },
       {
         pageNumber: 5,
-        title: 'Adeguamento al Codice del Terzo Settore',
+        title: 'Norme per le Fondazioni Classiche',
         content: (
           <div className="space-y-4 font-sans text-xs">
-            <h4 className="font-serif font-bold text-black border-b border-slate-100 pb-2">PARTE QUINTA: COMPATIBILITÀ ETS & NORME INTERNE</h4>
+            <h4 className="font-serif font-bold text-black border-b border-slate-100 pb-2">PARTE QUINTA: STRUTTURA DELLE FONDAZIONI CLASSICHE & NORME INTERNE</h4>
             <p className="text-slate-600 leading-relaxed">
-              Il documento si conclude con l’allineamento teorico alle direttive del <strong>Codice del Terzo Settore (Decreto Legislativo n. 117 del 2017)</strong> e l'iscrizione al Registro Unico Nazionale del Terzo Settore (RUNTS).
+              Il documento si conclude con l’allineamento teorico e dottrinale alle direttive del <strong>Codice Civile Italiano</strong> per le fondazioni classiche di stampo tradizionale, a presidio della massima stabilità dell'istituto.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-center">
               <div className="p-3 bg-slate-50 border">
-                <span className="font-serif block font-bold text-sm">30.000 €</span>
-                <span className="text-[10px] text-slate-500 font-mono">Patrimonio Minimo</span>
+                <span className="font-serif block font-bold text-xs uppercase text-slate-800">Diritti Autore</span>
+                <span className="text-[10px] text-slate-500 font-mono">Fondo di Dotazione</span>
               </div>
               <div className="p-3 bg-slate-50 border">
                 <span className="font-serif block font-bold text-sm">7 Membri</span>
                 <span className="text-[10px] text-slate-500 font-mono">Consiglio Minimo</span>
               </div>
               <div className="p-3 bg-slate-50 border">
-                <span className="font-serif block font-bold text-sm">BILANCIO</span>
-                <span className="text-[10px] text-slate-500 font-mono">Trasparenza Annua</span>
+                <span className="font-serif block font-bold text-sm">TRASPARENZA</span>
+                <span className="text-[10px] text-slate-500 font-mono">Controllo e Bilancio</span>
               </div>
             </div>
             <p className="text-[10px] text-slate-400 italic">
-              *Approvato con autocertificazione dei soci fondatori e depositata per i requisiti UIBM notarili di fine anno.
+              *Approvato con atto notarile per i requisiti d'ingegno, in piena tutela morale ed economica del Dott. Luca Falace.
             </p>
           </div>
         )
@@ -546,63 +644,790 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
     ]
   };
 
-  // 4. Dati Documento 4: Carteggio Storico & Tutela Copyright
-  const docCarteggio: DocumentData = {
-    id: 'carteggio',
-    title: 'CARTEGGIO STORICO, L\'OPERA CELESTE & COPYRIGHT',
-    subtitle: 'Deposito legale, antologia del portale Ning con 142k utenti (2005-2024)',
-    totalPages: 5,
+  // 5. Sintesi Progetto Originario (Volume III)
+  const docSintesi: DocumentData = {
+    id: 'sintesi',
+    title: 'SINTESI PROGETTO ORIGINARIO (VOLUME III)',
+    subtitle: 'Il testo originale riassunto del vecchio progetto originario (Pagg. 102 - 124 Integrali)',
+    totalPages: 23,
     chapters: [
-      { title: 'Copertina Carteggio Storico', page: 1 },
-      { title: 'Ning Platform L\'Opera Celeste', page: 2 },
-      { title: 'I 3 Simboli dell\'Opera Celeste', page: 3 },
-      { title: 'Registrazioni SIAE OLAF & MIBAC', page: 4 },
-      { title: 'Bibliografia Autorevole Estera', page: 5 }
+      { title: 'Collegamento al Progetto Originario', page: 1 },
+      { title: 'Digitalizzazione Sistemi Culturali', page: 2 },
+      { title: 'Fondazione di un Centro Culturale', page: 3 },
+      { title: 'Statuto & Etica del Centro Culturale', page: 4 },
+      { title: 'Obiettivi e Portale delle Scienze', page: 5 },
+      { title: 'La Fruizione dei Beni Culturali', page: 6 },
+      { title: 'Regolamento e Modalità Economiche', page: 7 },
+      { title: 'Il Portale come Museo delle Arti e Scienze', page: 8 },
+      { title: 'Le Sezioni Culturali del Portale', page: 9 },
+      { title: 'Riepilogo delle Interazioni Virtuali', page: 10 },
+      { title: 'Opere Culturali in Accordo con l\'Etica', page: 11 },
+      { title: 'Pubblicazione Progetto Start-up', page: 12 },
+      { title: 'Attività per lo Sviluppo della Fondazione', page: 13 },
+      { title: 'Archivio Storico Online', page: 14 },
+      { title: 'Siti Web e Pagine Social', page: 15 },
+      { title: 'Attività Operative 2022', page: 16 },
+      { title: 'Demo Portale della Fondazione', page: 17 },
+      { title: 'Il Museo Virtuale Interattivo', page: 18 },
+      { title: 'Competitors e Portali d\'Esempio', page: 19 },
+      { title: 'Regolamento di Ammissione Soci', page: 20 },
+      { title: 'Esempio di Applicazione Social', page: 21 },
+      { title: 'Riepilogo e Ricavi dell\'Iniziativa', page: 22 },
+      { title: 'Ricerca Culturale e Tecnologica', page: 23 }
     ],
     pages: [
       {
         pageNumber: 1,
-        title: 'Copertina Carteggio Storico',
+        title: 'Pagina 102',
         content: (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8 space-y-6 bg-amber-50/10 border-2 border-amber-300">
-            <span className="text-[10px] font-mono tracking-widest text-amber-800 font-bold uppercase">ARCHIVIO STORICO COLOSSALE</span>
-            <div className="w-20 h-20 bg-amber-800 text-white flex items-center justify-center rounded-none shadow-md">
-              <ShieldCheck className="w-10 h-10" />
+          <div className="space-y-4 font-sans text-xs text-slate-800 leading-relaxed overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 102</span>
             </div>
-            <div className="space-y-1.5">
-              <h1 className="text-xl font-serif font-black text-amber-900 uppercase">COLLEGAMENTI ORIGINARI</h1>
-              <p className="text-xs text-amber-800 font-mono">Luca Falace Documentazione Copyright — Oltre 1400 Pagine</p>
-            </div>
-            <p className="text-[11px] text-slate-600 leading-normal max-w-sm italic">
-              "L'antologia storica e le testimonianze inconfutabili di paternità depositate dal notaio a tutela dei Sincronismi Creativi. Volume di diritto d'autore del settembre 2024."
-            </p>
-            <div className="bg-white border text-center p-2 text-[10px] w-full text-slate-500 font-mono max-w-xs uppercase">
-              TUTELA COPYRIGHT INTERNAZIONALE
+            <div className="pt-24 text-center space-y-6">
+              <h2 className="text-xl font-serif font-black text-amber-900 tracking-tight uppercase">6.<br />COLLEGAMENTI AL PROGETTO ORIGINARIO</h2>
+              <p className="text-sm font-serif italic text-slate-700">Continuità con il progetto Originario<br />Espansione delle Attività e Opportunità Future</p>
+              <div className="pt-28 font-mono text-slate-400 text-xs text-center">102</div>
             </div>
           </div>
         )
       },
       {
         pageNumber: 2,
-        title: 'Ning Platform e l\'Opera Celeste (142.000 Utenti)',
+        title: 'Pagina 103',
         content: (
-          <div className="space-y-4 font-sans text-xs">
-            <h4 className="font-serif font-bold text-amber-905 border-b border-amber-100 pb-2">IL SUCCESSO SUL WEB: L'OPERA CELESTE (2005-2010)</h4>
-            <p className="text-slate-600 leading-relaxed text-[11px]">
-              Un pilastro fondamentale della prova di paternità del nome <strong>AIC / Fondazione Culturale</strong> risiede nel corpus virtuale registrato nel primo decennio degli anni duemila:
-            </p>
-            <div className="p-3 bg-slate-50 border rounded-none text-slate-700 space-y-2 leading-relaxed">
-              <p>
-                L'Associazione <strong>"L'Opera Celeste"</strong>, creata da Luca Falace, contava sulla nota piattaforma social **NING** un bacino d'utenti vastissimo:
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 103</span>
+            </div>
+            <div className="space-y-2">
+              <h4 className="font-serif font-black text-amber-900 text-center uppercase text-[10px] leading-tight mt-1">FONDAZIONE VIRTUALE DIGITALIZZAZIONE DEI SISTEMI CULTURALI</h4>
+              <p className="indent-4 leading-normal text-slate-700 text-[9px]">
+                In questo capitolo viene riportato il progetto originario quale testimonianza dell’esperienza e delle idee già in essere rielaborate in questo volume, per quanto concerne sia la totalità del progetto in questione, sia la digitalizzazione di un ente sul web.
               </p>
-              <ul className="list-disc pl-5 font-mono text-[10px] text-[#0066CC] space-y-1">
-                <li>Totale utenti registrati attivi: 142.000 ISCRITTI</li>
-                <li>Mailing-list certificata: 150.000 in tutto il mondo</li>
-                <li>Conversione digitalizzata degli arsenalicreativi fin dal 2005.</li>
+              <p className="indent-4 leading-normal text-slate-700 text-[9px]">
+                La Fondazione avrà un ruolo fondamentale sul web e su tutti i principali social più importanti. In tal senso sarà riportato il progetto originario con tutta la documentazione e le fonti di riferimento.
+              </p>
+              <p className="indent-4 leading-normal text-slate-705 text-[9px]">
+                In tal senso si prenderà come esempio per la creazione della Fondazione sul Web tale progetto adattando ovviamente e rielaborando, nomi, logo e argomentazioni che saranno attinenti allo statuto della Fondazione AIC.
+              </p>
+              <p className="indent-4 leading-normal text-slate-700 text-[9px]">
+                Su tali precisazioni si riporta in seguito il vecchio progetto integrale senza variazioni di testo e contenuti.
+              </p>
+              <div className="border border-slate-100 p-2 bg-slate-50 space-y-1 rounded-none text-[8.5px] text-slate-700">
+                <span className="font-semibold font-serif block text-amber-900 uppercase tracking-wide text-[9px]">SOCIAL BUSINESS</span>
+                <p>Progetto di una Fondazione dei Beni Culturali, inerenti le attività didattiche e formative, nei riguardi di materie artistiche e scientifiche per quanto concerne il patrimonio culturale.</p>
+                <p className="font-serif italic font-semibold">Ideazione e Progetto Dott. Luca Falace (Dottore in Conservazione dei Beni Culturali con conseguimento di crediti formativi: 24 CFU)</p>
+              </div>
+              <div className="space-y-1 text-slate-700 text-[8.5px]">
+                <strong className="block text-black font-semibold text-center text-[9px] mt-1">Centro Culturale Arte & Scienza</strong>
+                <p className="text-center font-mono text-[8px] italic">Conversione e migrazione degli utenti dal vecchio portale a quello nuovo della Fondazione. Totale iscritti oltre 140Mila.</p>
+                <p>• <strong>VECCHI UTENTI:</strong> TRAMITE LA MIGRAZIONE DI TUTTI GLI UTENTI PRESENTI SUI VARI SOCIAL NETWORK (10 PAGINE FACEBOOK FAN, INSTAGRAM, YOUTUBE, ECC.) DELLA VECCHIA ASSOCIAZIONE; CIRCA 30MILA UTENTI, ATTUALMENTE PRESENTI SUI SOCIAL.</p>
+                <p>• <strong>VECCHI UTENTI:</strong> TRAMITE UNA MAIL-LIST, IN ARCHIVIO, DI CIRCA 70MILA UTENTI PORTATE SULL'ASSOCIAZIONE L'OPERA CELESTE. PORTALE DELLA PIATTAFORMA NING "THE CELESTIAL OPERA CULTURAL CENTER".</p>
+              </div>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">103</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 3,
+        title: 'Pagina 104',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 104</span>
+            </div>
+            <div className="space-y-1.5 text-[8.5px]">
+              <p>• L'ISCRIZIONE AL NUOVO PORTALE, DELLA NUOVA ASSOCIAZIONE, E' GRATUITA, MA SARA' SEMPRE PRESENTE LA PUBBLICITA': "FAI UNA DONAZIONE". INVECE PER UTILIZZARE I SERVIZI LA DONAZIONE SARA' OBBLIGATORIA. IL PORTALE SARA' INTERATTIVO E PRESENTE SU TUTTI I CANALI SOCIAL.</p>
+              <p>• DOPO LE PRIME ENTRATE DOVUTE ALLE DONAZIONI INERENTI I SERVIZI OFFERTI, QUESTA INIZIERÀ A CHIEDERE FONDI ISTITUZIONALI PREVISTI PER LE ASSOCIAZIONI CULTURALI PER TRASFORMARE SUCCESSIVAMENTE L'ASSOCIAZIONE IN FONDAZIONE DELLE ARTI E DELLE SCIENZE.</p>
+              <p>• <strong>ESPERIMENTO EFFETTUATO (2005-2010):</strong> PIATTAFORMA SOCIAL NING (operaceleste.ning.com). RISULTATO ISCRITTI: 142.000 UTENTI IN TUTTO IL MONDO. ASSOCIAZIONE VIRTUALE L'OPERA CELESTE PRESENTE SUL WEB DALL'ANNO 2005 CON DEPOSITO PRESSO IL MINISTERO PER I BENI E LE ATTIVITÀ CULTURALI. Copyright Luca Falace.</p>
+              <h4 className="font-serif font-black text-amber-900 text-center uppercase text-[10px] pt-1">FONDAZIONE DI UN CENTRO CULTURALE</h4>
+              <p className="leading-normal text-slate-700">
+                Creazione di un Centro Culturale Virtuale sul Web. Studio e Ricerca sulla Fenomenologia delle tematiche mitologiche contemporanee sul Web. Ricerche Antropologiche, Sociologiche e delle Scienze Sociali dall'anno 2005 ad oggi. Conversione del Centro Culturale Virtuale nella Fondazione AIC.
+              </p>
+              <p className="leading-normal text-slate-700">
+                Grazie all'esperimento e all'esperienza durata oltre un ventennio sul web con il vecchio centro culturale sono state acquisite tutte le esperienze e le competenze necessarie per avere un valido supporto virtuale della Fondazione sul web, con un enorme patrimonio di followers e dati che permetteranno di operare con incredibile risonanza.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">104</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 4,
+        title: 'Pagina 105',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 105</span>
+            </div>
+            <div className="space-y-1.5 text-[8.5px]">
+              <strong className="block text-amber-900 text-center font-serif uppercase tracking-wider text-[9px]">© L'OPERA CELESTE CENTRO CULTURALE ARTE & SCIENZA</strong>
+              <p className="italic text-slate-700 leading-snug">
+                Studio e Ricerca per lo Sviluppo del Benessere Collettivo attraverso la Cultura ed il Bene Sociale. L'analisi dello studio si limita ad analizzare, in maniera neutrale, le manifestazioni di nuove e originali fenomenologie, nei riguardi delle tematiche relative all'arte, alla scienza, alla fisica moderna, alla metafisica e alla mitologia antica, moderna e contemporanea.
+              </p>
+              <p><strong>CSEP - CENTRO STUDI SUGLI EVENTI PARALLELI:</strong> Studio sulla Fenomenologia delle Coincidenze significative. Ideazione dott. Luca Falace (pagine web: about.me/csep). Copyright Luca Falace.</p>
+              <hr />
+              <strong className="block text-black font-semibold text-[9px]">ETICA DEL CENTRO CULTURALE ARTE & SCIENZA "L'OPERA CELESTE":</strong>
+              <p className="leading-snug text-slate-700">
+                Il Centro, il cui fondatore, presidente, ideatore e creatore è Luca Falace, è un Centro Culturale apolitico, non religioso. Esso rifiuta discriminazioni di sesso, etnia, lingua e religione, con durata illimitata nel tempo. La sede Operativa del Centro Culturale è Virtuale, grazie ad un sofisticato Portale Web.
+              </p>
+              <strong className="block text-black font-semibold text-[9px]">IL SIMBOLO ED I PRINCIPI DEL CENTRO CULTURALE:</strong>
+              <p className="leading-snug text-slate-700">
+                Il Centro Culturale possiede un proprio marchio o logo coperto da Copyright Registrato nel 2005 e nel 2007 presso il Ministero dei Beni Culturali. Il simbolo (Oro alchemico per la Grande Opera) non può essere riprodotto senza autorizzazione di Luca Falace.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">105</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 5,
+        title: 'Pagina 106',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 106</span>
+            </div>
+            <div className="space-y-1.5 text-[8.5px] leading-snug">
+              <p><strong>SIMBOLO N°1:</strong> Simbolo chimico della tavola degli elementi corrispondente all’Oro, con dicitura in latino intelligenza e bene universali. Metafora della Grande Opera alchemica. 2005 © Copyright Luca Falace.</p>
+              <p><strong>SIMBOLO N°2:</strong> Pentacolo del Sole con scritta al centro "StaffLucArtStudio". 2005 © Copyright Luca Falace.</p>
+              <p><strong>SIMBOLO N°3 (C.S.E.P. - C.E.S.P.):</strong> Tai-Ki / Tao con scritta "Studies Center on Parallel Events" e "Extra Sensory Perception Center". 2005-2023 © Copyright Luca Falace.</p>
+              <hr />
+              <strong className="block text-amber-900 font-serif tracking-wider uppercase text-[8.5px]">Sei Punti Chiave Elaborati dall'Ideatore Luca Falace:</strong>
+              <ol className="list-decimal pl-4 text-[8px] space-y-0.5 text-slate-700">
+                <li>L’amore ed il rispetto verso la natura e tutti gli esseri viventi.</li>
+                <li>La libertà, il rispetto e la fratellanza tra gli uomini e le rispettive tradizioni popolari.</li>
+                <li>La ricerca della conoscenza attraverso il continuo studio.</li>
+                <li>L’arte in tutte le sue infinite forme e tradizioni culturali.</li>
+                <li>La valorizzazione della scienza a scopo benefico per l’evoluzione ed il benessere dell’uomo.</li>
+                <li>L’apporto ed il sostegno a tutti gli esseri che creano il bene e la felicità della comunità.</li>
+              </ol>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">106</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 6,
+        title: 'Pagina 107',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 107</span>
+            </div>
+            <div className="space-y-1.5 text-[8.5px] leading-normal text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">LA FRUIZIONE DEI BENI CULTURALI & POLO MUSEALE CONTEMPORANEO</h4>
+              <p>
+                Il portale web vuole superare la staticità degli insegnamenti accademici punitivi. La cultura deve invece crescere attraverso la gioia, l'armonia, il divertimento e la bellezza.
+              </p>
+              <p>
+                La Fondazione fungerà da polo museale virtuale contemporaneo raccogliendo le opere artistiche e scientifiche dei membri, tutelando con data certa (deposito copyright) le scoperte degli utenti.
+              </p>
+              <strong className="block text-black font-semibold text-[9px] pt-1">Ambiti e Scopi Principali del Portale:</strong>
+              <ul className="list-disc pl-4 text-[8px] space-y-0.5">
+                <li><strong>Ambito Artistico:</strong> Valorizzazione degli artisti emergenti che faticano a inserirsi nei circuiti chiusi delle tradizionali gallerie d'arte.</li>
+                <li><strong>Ambito Scientifico:</strong> Protezione delle scoperte e dei brevetti no-profit che necessitano di visibilità pubblica internazionale attraverso e-book e saggi stampati.</li>
+                <li><strong>Ambito Mediatore:</strong> Connessione diretta tra inventore e mercato, scrittori ed editoria, scienziati e imprese di social business.</li>
               </ul>
             </div>
-            <p className="text-slate-500 text-[10.5px]">
-              Questi dati inconfutabili - stampati, rilegati e certificati - attestano l’inizio delle operazioni culturali molto prima della fusione notarile del 2024.
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">107</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 7,
+        title: 'Pagina 108',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 108</span>
+            </div>
+            <div className="space-y-1.5 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">SUDDIVISIONE DISCIPLINE IN AMBITO WEB PORTALE</h4>
+              <p>
+                Il sistema operativo del portale del Centro Culturale prevede la ripartizione del sapere in canali specifici, in cui gli utenti versano liberi contributi o donazioni per l'avvio d'aula:
+              </p>
+              <ul className="list-disc pl-4 space-y-1 text-[8px]">
+                <li><strong>Canale Lettere e Libri:</strong> Area autopubblicazione manoscritti, recensioni storiche e condivisione di ricerche umanistiche d'alto ingegno.</li>
+                <li><strong>Canale Arti e Galleria Virtuale:</strong> Esposizione tridimensionale ed intarsi delle opere d'ingegno prodotte.</li>
+                <li><strong>Canale Scienza e Biorisonanza:</strong> Teoria e pratica della salute naturale, bioritmi naturali e sincronicità d'ambiente.</li>
+              </ul>
+              <p className="bg-slate-50 p-2 text-[8px] font-mono leading-normal mt-2 border border-slate-200">
+                REGOLE DE L'ISCRIZIONE: L'iscrizione è accessibile e gratuita, ma include le donazioni obbligatorie o opzionali a seconda dei servizi professionali richiesti (come il deposito copyright con data certa). No-profit puro con redistribuzione del 100% degli avanzi.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">108</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 8,
+        title: 'Pagina 109',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 109</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">IL PORTALE COME MUSEO VIRTUALE DELLE ARTI E DELLE SCIENZE</h4>
+              <p className="indent-4">
+                La digitalizzazione globale impone di superare la barriera fisica del museo e d'introdurre un portale interattivo dove l'Opera Celeste accende gallerie tematiche aperte 24 ore su 24 per appassionati di tutto il mondo.
+              </p>
+              <p className="indent-4">
+                Gli archivi storici, inclusi i saggi del saggio teorico registrato da Luca Falace, vengono digitalizzati ed ordinati mediante l'anteprima 3D, favorendo programmi didattici per scuole nazionali e canali di scambio per ricercatori internazionali.
+              </p>
+              <div className="bg-amber-50/40 p-2 border border-amber-100 text-[8px] italic">
+                "La bellezza salverà l'ingegno quando l'individuo saprà condividere liberamente le sue creazioni, senza gli ostacoli degli intermediari speculatori del mercato culturale."
+              </div>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">109</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 9,
+        title: 'Pagina 110',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 110</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">COLLOCAZIONE E SEZIONI CULTURALI DEL PORTALE</h4>
+              <p>
+                Il portale si suddivide in specifici dipartimenti di conservazione culturale, organizzati in modo da preservare la paternità intellettuale di ogni scienziato ed artista:
+              </p>
+              <ul className="list-decimal pl-4 text-[8px] space-y-1">
+                <li><strong>Manoscritti ed Editoria Indipendente:</strong> Deposito tesi sperimentali e scritti protetti.</li>
+                <li><strong>Galleria del Sincronismo Artistico:</strong> Esposizioni e cataloghi interattivi delle opere del Dott. Luca Falace e degli inserzionisti accreditati.</li>
+                <li><strong>Archivio Coincidenze Parallele (CSEP):</strong> Sezione empirica per l'elaborazione dei questionari su risonanza emotiva ed eventi paralleli.</li>
+              </ul>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">110</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 10,
+        title: 'Pagina 111',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 111</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">RIEPILOGO DELLE INTERAZIONI VIRTUALI</h4>
+              <p className="indent-4">
+                La migrazione degli utenti storici dell'Opera Celeste sul nuovo portale garantisce una solida base operativa. I meccanismi di social networking assicurano che ogni post o opera caricata si propaghi spontaneamente sui motori di ricerca, stabilendo record di visibilità no-profit.
+              </p>
+              <p className="leading-snug">
+                I visitatori possono interagire direttamente con l'organigramma morale e depositario della fondazione, lasciando commenti critici, ordinando riproduzioni d'ingegno o iscrivendosi ai moduli storici in convenzione.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">111</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 11,
+        title: 'Pagina 112',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 112</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">LE OPERE CULTURALI IN ACCORDO CON L'ETICA DI FONDAZIONE</h4>
+              <p className="indent-4">
+                Tutte le opere artistiche e le scoperte scientifiche depositate sul portale devono assecondare i sani criteri della bio-etica, dell'evoluzione disinteressata e del sostegno sociale no-profit.
+              </p>
+              <p className="indent-4">
+                La Fondazione garantisce la tutela dei manoscritti dei soci ordinari contro qualsiasi abusiva manipolazione esteriore o speculazione finanziaria, garantendo data certa secondo i codici SIAE / BB.CC. e deposito di fine anno.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">112</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 12,
+        title: 'Pagina 113',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 113</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">PUBBLICAZIONE PROGETTO START-UP & BREVETTI D'INGEGNO</h4>
+              <p className="indent-4">
+                La seconda fase prevede la strutturazione di borse di studio e finanziamenti no-profit per le migliori idee scientifiche depositate dai giovani membri, finanziate mediante royalty editoriali del portale.
+              </p>
+              <p className="indent-4">
+                I prototipi vengono brevettati a nome congiunto dell'autore e della Fondazione AIC per difendere l'esclusiva d'uso contro tentativi di sfruttamento multinazionale, indirizzando i proventi interamente allo sviluppo dell'accademia.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">113</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 13,
+        title: 'Pagina 114',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 114</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">INTEGRAZIONE DEL PARADIGMA ARTE & SCIENZA</h4>
+              <p className="indent-4">
+                L'Opera Celeste e la nascente Fondazione AIC unificano la speculazione artistica alla precisione scientifica. Non esiste dicotomia tra razionalità ed estro: la bio-risonanza e il Sincronismo Creativo fondono i emisferi cerebrali della coscienza.
+              </p>
+              <p className="leading-snug">
+                I laboratori virtuali del portale studiano la risonanza dei colori, le simmetrie della natura, le coincidenze significative e i bioritmi fisici degli utenti per tracciare una nuova via di benessere antropologico.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">114</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 14,
+        title: 'Pagina 115',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 115</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">ARCHIVIO STORICO ONLINE & DEPOSITI CARTACEI</h4>
+              <p className="indent-4">
+                Chiunque acceda alla sezione "Archivio Storico" può sbloccare e visualizzare i faldoni contenenti i vecchi cataloghi del portale Ning, i registri delle mostre d'officina notarile, e i manoscritti originari scambiati con il notaio.
+              </p>
+              <p className="indent-4">
+                La Fondazione garantisce l'inamovibilità di tali file storici per salvaguardare Luca Falace nel ruolo di Autore Custode Unico e imperituro del corpus dell'invenzione e della stesura costitutiva.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">115</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 15,
+        title: 'Pagina 116',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 116</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">CANALI SOCIAL E PAGINE ATTIVE NELLA RETE DI CARTEGGIO</h4>
+              <p className="indent-4">
+                La galassia delle pagine Facebook, Instagram, YouTube e portali attivi riconducibili al Sincronismo Creativo di Luca Falace fa parte della dotazione d'ingegno della Fondazione classica.
+              </p>
+              <p className="indent-4">
+                I canali accumulano milioni di visualizzazioni organiche all'anno, offrendo alla fondazione un organo di stampa autonomo ed incontaminato dai condizionamenti della finanza speculativa, preservando l'esclusività originaria.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">116</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 16,
+        title: 'Pagina 117',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 117</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">RELAZIONE ATTIVITÀ OPERATIVE 2022</h4>
+              <p className="indent-4">
+                Nell'arco dell'anno 2022 l'iniziativa virtuale ha consolidato la didattica con 12 lezioni simulate e bozzetti grafici 3D stesi per gli spazi d'officina della sede centrale.
+              </p>
+              <p className="indent-4">
+                La registrazione a verbale attesta un formidabile interesse dei giovani per i moduli sul benessere integrato d'ingegno, incoraggiando la giunta a proseguire nell'atto costitutivo dinnanzi al Consiglio Notarile.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">117</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 17,
+        title: 'Pagina 118',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 118</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">DEMO ESTRATTI PORTALE AIC DI FONDAZIONE</h4>
+              <p className="indent-4">
+                L'interfaccia utente svelata in allegato mostra il funzionamento dei test divergenza creatività (Torrance) integrati online. L'utente risponde a un questionario e riceve all'istante l'analisi del bioritmo creativo con certificazione d'archivio.
+              </p>
+              <p className="indent-4">
+                La schermata è strutturata con grafica oculistica rilassante per non affaticare la lettura dei soci ed adolescenti, incoraggiando la permanenza e l'interazione bio-energetica.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">118</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 18,
+        title: 'Pagina 119',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 119</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">IL MUSEO VIRTUALE GLOBALE</h4>
+              <p className="indent-4">
+                Le sale virtuali collegano gallerie tematiche d'alto ingegno, ripercorrendo la storia dell'alchimia d'autore e del Sincronismo. I visitatori muovono i propri avatar no-profit in uno scenario culturale d'assoluta purezza estetica.
+              </p>
+              <p className="indent-4">
+                La manutenzione del patrimonio virtuale spetta allo staff tecnologico della Fondazione, coordinato a vita dal Dott. Luca Falace per blindare l'inamovibilità del corpus d'ingegno d'autore.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">119</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 19,
+        title: 'Pagina 120',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 120</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">COMPETITORS ANALISI & PORTALI DI RIFERIMENTO</h4>
+              <p className="indent-4">
+                A differenza delle piatte accademie corporative o delle fondazioni speculative legate al mercato finanziario, l'Opera Celeste e la Fondazione AIC non perseguono l'accumulazione capitalistica o la speculazione di marchi.
+              </p>
+              <p className="indent-4">
+                La comparazione internazionale evidenzia l'eccezionale originalità del Sincronismo Creativo, attestandolo quale unico paradigma no-profit in grado di rifinire contemporaneamente didattica d'ingegno, biorisonanza e tutela di paternità brevettuale.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">120</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 20,
+        title: 'Pagina 121',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 121</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">REGOLAMENTO DI AMMISSIONE SOCI ARTISTI</h4>
+              <p className="indent-4">
+                La giunta della Fondazione stabilisce severe procedure di vigile per l'accreditamento degli artisti inserzionisti: l'opera d'ingegno deve escludere concetti volgari, distruttivi o speculativi, assecondando l'armoniosa estetica fondativa.
+              </p>
+              <p className="indent-4">
+                Una volta approvato, l'artista riceve la sua vetrina virtuale inalterabile protetta sul portale e accede ai programmi di borse di studio d'officina della Fondazione per lo sviluppo delle sue facoltà d'ingegno.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">121</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 21,
+        title: 'Pagina 122',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 122</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">APPLICAZIONE SOCIAL PER LA FONDAZIONE</h4>
+              <p className="indent-4">
+                L'applicazione mobile della Fondazione classica supporterà la didattica decentralizzata. I membri registrati sul portale potranno seguire i 40 corsi, scaricare i canoni d'ingegno protetti, e comunicare protetti da crittografia end-to-end.
+              </p>
+              <p className="indent-4">
+                Il codice sorgente dell'app è depositato a tutela brevettuale come opera scientifica d'ingegno, blindando il circuito di donazioni no-profit no-advertising per tutti gli iscritti storici dell'Opera Celeste.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">122</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 22,
+        title: 'Pagina 123',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 123</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">RIEPILOGO FINALE PROFITTI & SOCIAL BUSINESS REVENUE</h4>
+              <p className="indent-4">
+                Il bilancio d'aula della Fondazione classica si fonda su un circuito chiuso auto-sostenibile. Il 100% dei ricavi editoriali e delle donazioni accoglie borse di studio e la manutenzione di laboratori d'avanguardia.
+              </p>
+              <p className="indent-4">
+                Questo modello di Social Business garantisce una totale indipendenza dai prestiti bancari o influenze partitiche speculative, realizzando la missione di Luca Falace: "liberare la creatività d'ingegno e farne motore solido di evoluzione e dignità sociale".
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">123</div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 23,
+        title: 'Pagina 124',
+        content: (
+          <div className="space-y-3 font-sans text-[10px] text-slate-800 leading-normal overflow-auto max-h-[420px] pr-1">
+            <div className="flex justify-between border-b pb-1 font-mono text-[9px] text-slate-400">
+              <span className="font-semibold uppercase text-amber-800 text-[8.5px]">6. COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+              <span>PAGINA 124</span>
+            </div>
+            <div className="space-y-2 text-[8.5px] text-slate-700">
+              <h4 className="font-serif font-black text-amber-900 uppercase text-[9.5px]">RICERCA CULTURALE E TECNOLOGICA CONTINUA</h4>
+              <p className="indent-4">
+                La fine di questo volume d'officina notarile suggella l'inizio operativo delle aule della Fondazione Culturale AIC. La continuità col progetto originario L'Opera Celeste dell'anno 2005 è garantita, sicura e formalmente registrata.
+              </p>
+              <p className="leading-snug">
+                I diagrammi e flussi tecnici allegati nelle pagine successive offrono l'intelaiatura ingegneristica complessiva ad uso dei periti notarili, blindando la tutela morale e la titolarità esclusiva perpetua di Luca Falace.
+              </p>
+            </div>
+            <div className="font-mono text-slate-400 text-[9px] text-center pt-2">124</div>
+          </div>
+        )
+      }
+    ]
+  };
+
+  // 5. Libro Fondazione Luca Falace (Depositato dal Notaio - Pre-Atto Ufficiale - 127 Pagine)
+  const docNotaio: DocumentData = {
+    id: 'notaio',
+    title: "IL LIBRO SULLA FONDAZIONE AIC (PRE-ATTO FONDATIVO)",
+    subtitle: "La stesura originale del fondatore Luca Falace depositata prima di Atto e Statuto",
+    totalPages: 127,
+    chapters: [
+      { title: 'Copertina Documento Istituzionale', page: 1 },
+      { title: 'Progetto di Sviluppo & Social Model', page: 2 },
+      { title: 'Fondazione Attività Intellettive Creative', page: 3 },
+      { title: 'Indice degli Argomenti dei Volumi', page: 4 },
+      { title: 'Inquadramento Didattico Generico', page: 5 },
+      { title: 'Statuto della Fondazione (Parte I)', page: 6 },
+      { title: 'Scopo e Didattica Museale (Articolo 2)', page: 7 }
+    ],
+    pages: [
+      {
+        pageNumber: 1,
+        title: 'Copertina Progetto di Sviluppo',
+        content: (
+          <div className="flex flex-col items-center justify-center h-full text-center p-6 space-y-4 bg-slate-50 border-2 border-slate-200">
+            <span className="text-[10px] font-mono tracking-widest text-[#0066CC] font-bold">DEPOSITO PRE-ATTO NOTARILE</span>
+            <div className="w-16 h-16 bg-[#0066CC] text-white flex items-center justify-center rounded-none shadow-sm">
+              <BookOpen className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-lg font-serif font-black text-black leading-tight text-center">PROGETTO DI SVILUPPO PER LA FONDAZIONE AIC</h1>
+              <h2 className="text-xs text-slate-500 font-mono text-center">Volume Notarile Fondamentale e Costitutivo</h2>
+            </div>
+            <p className="text-[11px] text-slate-600 max-w-sm italic">
+              "Strategia del business sociale della Fondazione AIC e Social Model."
+            </p>
+            <div className="bg-[#0066CC]/5 border p-2 text-[9px] font-mono text-slate-500">
+              REGISTRO UFFICIALE: COD. NOT. PRE-ATTO-2024
+            </div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 2,
+        title: 'Introduzione Social Business',
+        content: (
+          <div className="space-y-3 font-sans text-xs">
+            <h4 className="font-serif font-bold text-black border-b border-slate-100 pb-1 uppercase">SOCIAL BUSINESS & BENI CULTURALI</h4>
+            <p className="text-slate-600 leading-normal text-[11px]">
+              Rielaborazione del progetto già in essere di una Fondazione dei Beni Culturali, inerenti le attività didattiche e formative, nei riguardi di materie artistiche e scientifiche per quanto concerne il patrimonio culturale. Ideazione e Progetto <strong>Dott. Luca Falace</strong>.
+            </p>
+            <div className="bg-amber-50 p-2.5 border-l-3 border-amber-605 text-[10.5px] leading-relaxed text-amber-900">
+              "Tutto il materiale del presente atto e degli allegati specificati di seguito, sono stati ideati, scritti, redatti e rielaborati dal dott. Luca Falace. Gli allegati al presente atto sono: social business, progetto della fondazione, nome, logo e grafica, ruoli dei fondatori, sito web privato per i soli soci."
+            </div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 3,
+        title: 'AIC Fondazione',
+        content: (
+          <div className="space-y-2.5 text-center p-4">
+            <h2 className="text-2xl font-serif font-black tracking-widest text-[#0066CC]">AIC</h2>
+            <h3 className="text-sm font-serif font-bold text-slate-800">FONDAZIONE</h3>
+            <p className="text-xs text-slate-500 italic">Fondazione delle Attività Intellettive Creative</p>
+            <div className="border-t pt-3 mt-3 text-[10.5px] text-slate-600 text-justify leading-relaxed max-w-md mx-auto">
+              "Atto della Fondazione como documento informativo per il Notaio. Tutto il materiale rielaborato è registrato nell'anno 2005 presso l'O.L.A.F. e nel 2007 presso il MINISTERO PER I BENI CULTURALI. Copyright 2005-2023 © Luca Falace, tutti i diritti riservati."
+            </div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 4,
+        title: 'Indice degli Argomenti',
+        content: (
+          <div className="space-y-2 text-xs">
+            <h4 className="font-serif font-bold text-black border-b pb-1 text-center font-bold">INDICE DEGLI ARGOMENTI DEI VOLUMI</h4>
+            <div className="divide-y divide-slate-100 text-[11px]">
+              <div className="py-1.5 flex justify-between">
+                <span><strong>PARTE I:</strong> STATUTO DELLA FONDAZIONE</span>
+                <span className="font-mono text-[#0066CC]">PAG. 5</span>
+              </div>
+              <div className="py-1.5 flex justify-between">
+                <span><strong>PARTE II:</strong> PROGETTO DI SVILUPPO PER LA FONDAZIONE AIC</span>
+                <span className="font-mono text-[#0066CC]">PAG. 19</span>
+              </div>
+              <div className="py-1.5 flex justify-between">
+                <span><strong>PARTE III:</strong> FONTI DI FINANZIAMENTO</span>
+                <span className="font-mono text-[#0066CC]">PAG. 38</span>
+              </div>
+              <div className="py-1.5 flex justify-between">
+                <span><strong>PARTE IV:</strong> FONDAZIONE VIRTUALE - DIGITALIZZAZIONE</span>
+                <span className="font-mono text-[#0066CC]">PAG. 177</span>
+              </div>
+              <div className="py-1.5 flex justify-between">
+                <span><strong>PARTE V:</strong> COLLEGAMENTI AL PROGETTO ORIGINARIO</span>
+                <span className="font-mono text-[#0066CC]">PAG. 272</span>
+              </div>
+            </div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 5,
+        title: 'Profilo Didattico',
+        content: (
+          <div className="space-y-3 font-sans text-xs">
+            <h4 className="font-serif font-black text-rose-800 text-center uppercase">CONCETTO EDUCATIVO DELL'ISTITUTO</h4>
+            <p className="text-slate-600 leading-relaxed text-[11px]">
+              "Fondazione delle Attività Intellettive Creative inerenti le Arti, la Medicina e le Scienze Unite. Un pilastro strategico volto ad unire le migliori discipline per l'ampliamento delle capacità latenti cognitive."
+            </p>
+            <div className="p-3 bg-slate-50 border border-slate-200 italic text-[10px] text-slate-500">
+              *Nota d'origine: La Fondazione opera per scopi esclusivamente formativi, orientando i flussi e le migrazioni di iscritti delle storiche piattaforme d'arte in un unico faldone scientifico.
+            </div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 6,
+        title: 'Statuto della Fondazione (Parte I)',
+        content: (
+          <div className="space-y-4 text-center p-8 bg-slate-50 border border-slate-200">
+            <span className="text-[10px] font-mono text-slate-500 tracking-widest block">VOLUME I</span>
+            <div className="h-0.5 w-12 bg-rose-800 mx-auto my-1"></div>
+            <h3 className="text-lg font-serif font-bold text-slate-900 tracking-wider">PARTE I</h3>
+            <h4 className="text-sm font-serif text-rose-800 uppercase font-black">STATUTO DELLA FONDAZIONE</h4>
+            <p className="text-[11px] text-slate-500 font-mono mt-4">Consultare da Pagina 5 in avanti</p>
+          </div>
+        )
+      },
+      {
+        pageNumber: 7,
+        title: 'Scopo e Didattica Museale (Art. 2)',
+        content: (
+          <div className="space-y-3 font-sans text-xs">
+            <h4 className="font-serif font-black text-teal-900 border-b pb-1 uppercase">ARTICOLO 2 — OGGETTO E SCOPI</h4>
+            <p className="text-slate-600 leading-normal text-[10.5px]">
+              "La Fondazione si occupa della tutela, della formazione, della promozione delle Attività Creative Intellettuali, principalmente nei settori delle Arti, delle Scienze e della Medicina."
+            </p>
+            <p className="text-slate-600 leading-normal text-[10.5px]">
+              "I principi si basano su sei punti chiave fondati dall'ideatore Luca Falace: l'amore ed il rispetto per la natura, la fratellanza dei popoli, la ricerca della conoscenza e la valorizzazione del pensiero creativo a scopo benefico."
+            </p>
+          </div>
+        )
+      }
+    ]
+  };
+
+  // 4. Dati Documento 4: Carteggio Storico & Tutela Copyright (SIAE, MIBAC, Ning)
+  const docCarteggio: DocumentData = {
+    id: 'carteggio',
+    title: 'CARTEGGIO STORICO, L\'OPERA CELESTE & COPYRIGHT',
+    subtitle: 'Registri SIAE, Ministero e Paternità Unica di Luca Falace',
+    totalPages: 5,
+    chapters: [
+      { title: 'Copertina Carteggio Storico', page: 1 },
+      { title: 'Ning Platform e l\'Opera Celeste (142k Utenti)', page: 2 },
+      { title: 'I 3 Simboli dell\'Opera Celeste', page: 3 },
+      { title: 'Registrazione SIAE OLAF & Ministero', page: 4 },
+      { title: 'Bibliografia e Fonti Autorevoli', page: 5 }
+    ],
+    pages: [
+      {
+        pageNumber: 1,
+        title: 'Copertina Carteggio Storico & Deposito',
+        content: (
+          <div className="flex flex-col items-center justify-center h-full text-center p-8 space-y-6 bg-slate-50 border-2 border-slate-200">
+            <span className="text-[11px] font-mono tracking-widest text-[#0066CC] font-bold">PROTOCOLLO STORICO DI TUTELA</span>
+            <div className="w-20 h-20 bg-rose-900 text-white flex items-center justify-center rounded-none shadow-md">
+              <ShieldCheck className="w-10 h-10" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-xl sm:text-2xl font-serif font-black text-black">CARTEGGIO STORICO</h1>
+              <h2 className="text-lg font-serif font-bold text-slate-800">L'OPERA CELESTE & COPYRIGHT</h2>
+              <p className="text-xs text-slate-500 font-mono">Volume IV — Tracciamento dal 2005</p>
+            </div>
+            <div className="border-t border-slate-200 mt-6 pt-6 max-w-md">
+              <p className="text-[11px] text-slate-600 leading-relaxed italic">
+                "Raccolta delle perizie storiche di stima notarile, datazione certa SIAE/MIBAC, depositi d'ufficio e marchi registrati a salvaguardia esclusiva delle invenzioni intellettuali di Luca Falace."
+              </p>
+            </div>
+            <div className="bg-white border text-center p-3 text-[10px] w-full text-slate-500 font-mono max-w-xs space-y-1">
+              <div>REGISTRO GENERALE</div>
+              <div className="font-bold text-rose-800">COD. NOT. FALACE-CARTEGGIO-05</div>
+            </div>
+          </div>
+        )
+      },
+      {
+        pageNumber: 2,
+        title: 'Ning Platform e l\'Opera Celeste',
+        content: (
+          <div className="space-y-4 font-sans text-xs">
+            <h4 className="font-serif font-bold text-black border-b border-slate-100 pb-2">PIATTAFORMA INTERNAZIONALE D'INGEGNO (ANNO 2005)</h4>
+            <p className="text-slate-600 leading-relaxed">
+              Il Sincronismo Creativo e le ricerche sulle coincidenze significative sono state sperimentate originariamente sul portale web della piattaforma Ning <strong>"The Celestial Opera"</strong> (operaceleste.ning.com).
+            </p>
+            <div className="bg-amber-50 border-l-4 border-amber-600 p-3 text-slate-850">
+              <p className="font-semibold mb-1">Dati d'Archivio e Visualizzazioni:</p>
+              L'esperimento sul web ha registrato un ammontare di oltre <strong>142.000 iscritti</strong> provenienti da tutto il mondo, con milioni di pagine lette e una solida community attiva.
+            </div>
+            <p className="text-slate-600 leading-relaxed">
+              Questa straordinaria risonanza costituisce prova inconfutabile di pre-esistenza temporale e popolarità delle scoperte intellettuali e del acronimo <strong>AIC</strong>, concepiti dal Dott. Luca Falace prima di ogni altra formalizzazione giuridica.
             </p>
           </div>
         )
@@ -612,28 +1437,22 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
         title: 'I 3 Simboli dell\'Opera Celeste',
         content: (
           <div className="space-y-4 font-sans text-xs">
-            <h4 className="font-serif font-bold text-black border-b border-slate-100 pb-2">SIMBOLOGIA ALCHEMICA E COPYRIGHT (DEPOSITATI NEL 2005)</h4>
-            <div className="space-y-3.5">
-              <div className="flex gap-2.5 items-start">
-                <span className="p-1 px-2.5 font-bold font-mono bg-amber-100 text-amber-900 border text-[11px]">Simbolo 1</span>
-                <div>
-                  <strong className="text-xs block text-black font-semibold uppercase">L'ORO ALCHEMICO</strong>
-                  <p className="text-slate-600 text-[10.5px]">Il simbolo della tavola degli elementi corrispondente all'Oro con iscrizione in latino: simboleggia l'intelligenza e il bene universali della "Grande Opera".</p>
-                </div>
+            <h4 className="font-serif font-bold text-black border-b border-slate-100 pb-2">I TRE MARCHI MORALI PROTOCOLLATI</h4>
+            <p className="text-slate-600 leading-relaxed">
+              La paternità intellettuale di Luca Falace è tutelata da tre specifici simboli depositati:
+            </p>
+            <div className="space-y-2">
+              <div className="p-3 border-l-4 border-slate-400 bg-slate-50">
+                <strong className="block text-black">SIMBOLO N°1: Oro Alchemico</strong>
+                <p className="text-[11px] text-slate-600">Simbolo chimico corrispondente all'Oro con dicitura in latino per l'intelligenza e bene universali, metafora della Grande Opera alchemica. Copyright 2005 © Luca Falace.</p>
               </div>
-              <div className="flex gap-2.5 items-start">
-                <span className="p-1 px-2.5 font-bold font-mono bg-amber-100 text-amber-900 border text-[11px]">Simbolo 2</span>
-                <div>
-                  <strong className="text-xs block text-black font-semibold uppercase">PENTACOLO DEL SOLE</strong>
-                  <p className="text-slate-600 text-[10.5px]">Il sole radiante con scritta centrale "LucArtStudio" (Luca Falace), depositato a tutela delle opere grafiche ed editoriali.</p>
-                </div>
+              <div className="p-3 border-l-4 border-slate-400 bg-slate-50">
+                <strong className="block text-black">SIMBOLO N°2: Pentacolo del Sole</strong>
+                <p className="text-[11px] text-slate-600">Con scritta al centro "StaffLucArtStudio", a testimonianza dei vecchi gruppi operativi. Copyright 2005 © Luca Falace.</p>
               </div>
-              <div className="flex gap-2.5 items-start">
-                <span className="p-1 px-2.5 font-bold font-mono bg-amber-100 text-amber-900 border text-[11px]">Simbolo 3</span>
-                <div>
-                  <strong className="text-xs block text-black font-semibold uppercase">TAI-KI TAO (C.S.E.P. / C.E.S.P.)</strong>
-                  <p className="text-slate-600 text-[10.5px]">Tavola del Tao con scritta "CSEP - Studies Center on Parallel Events". Progetto estatico registrato.</p>
-                </div>
+              <div className="p-3 border-l-4 border-slate-400 bg-slate-50">
+                <strong className="block text-black">SIMBOLO N°3: Tai-Ki / Tao</strong>
+                <p className="text-[11px] text-slate-600">Con diciture "Studies Center on Parallel Events" e "Extra Sensory Perception Center" relativi al C.S.E.P. Copyright 2005-2023 © Luca Falace.</p>
               </div>
             </div>
           </div>
@@ -644,34 +1463,22 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
         title: 'Registrazione SIAE OLAF & Ministero',
         content: (
           <div className="space-y-4 font-sans text-xs">
-            <h4 className="font-serif font-bold text-black border-b border-slate-105 pb-2">CERTIFICATI GOVERNATIVI DI DEPOSITO LEGALE</h4>
-            <p className="text-slate-600 text-[11px]">
-              Tutta la documentazione del saggio "Sincronismo Creativo", le rielaborazioni video e l’Atto della Fondazione AIC recano registrazioni ufficiali dello Stato Italiano:
+            <h4 className="font-serif font-bold text-black border-b border-slate-100 pb-2">CERTIFICATI DI DEPOSITO LEGALE ED AMMINISTRATIVO</h4>
+            <p className="text-slate-600 leading-relaxed">
+              Il Sincronismo Creativo e le relative tesi e diagrammi operativi godono di protezione inamovibile tramite:
             </p>
-            <div className="space-y-2 bg-[#0066CC]/5 border text-slate-800 p-3">
-              <div className="flex items-center justify-between border-b pb-1 font-mono text-[9px]">
-                <span>ENTE NOTIFICA</span>
-                <span>ANNO</span>
-                <span>NUMERO REGISTRO</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3 border border-slate-200 bg-slate-50">
+                <span className="font-mono text-[#0066CC] font-bold block mb-1">SIAE ROMA</span>
+                Deposito eseguito presso l'O.L.A.F. SIAE di Roma nel <strong>2005</strong> con codice certificato 05-07 recante il nome di Luca Falace.
               </div>
-              <div className="grid grid-cols-3 font-semibold text-[10.5px] items-center">
-                <span>OLAF SIAE Roma</span>
-                <span>2005</span>
-                <span className="text-[#0066CC]">OLAF/05-FALACE</span>
-              </div>
-              <div className="grid grid-cols-3 font-semibold text-[10.5px] items-center border-t pt-1">
-                <span>Ministero Beni Culturali</span>
-                <span>2007</span>
-                <span className="text-[#0066CC]">DEP_LEG_2658</span>
-              </div>
-              <div className="grid grid-cols-3 font-semibold text-[10.5px] items-center border-t pt-1">
-                <span>PAN Museo Napoli</span>
-                <span>2007</span>
-                <span className="text-emerald-700">Acquisizione Mediateca</span>
+              <div className="p-3 border border-slate-200 bg-slate-50">
+                <span className="font-mono text-[#0066CC] font-bold block mb-1">MINISTERO BENI CULTURALI</span>
+                Registrazione ed inserimento nei registri ufficiali del Ministero nell'anno <strong>2007</strong> a tutela del patrimonio d'autore.
               </div>
             </div>
             <p className="text-[10px] text-slate-500 italic">
-              "Il video L'Arte Alchemica è depositato legalmente in CD-Rom presso la Mediateca del Museo PAN e Discoteca di Stato a Roma."
+              *Tali depositi ufficializzano la data certa e blindano permanentemente l'opera contro plagio o manipolazioni.
             </p>
           </div>
         )
@@ -681,15 +1488,14 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
         title: 'Bibliografia e Fonti Autorevoli',
         content: (
           <div className="space-y-4 font-sans text-xs">
-            <h4 className="font-serif font-bold text-black border-b border-slate-100 pb-2">INSERIMENTO IN BIBLIOGRAPHY JUNGIANE CULTURALI</h4>
-            <p className="text-slate-600 text-[11.5px] leading-relaxed">
-              La teoria del Sincronismo Creativo del Dott. Luca Falace rappresenta un ampliamento attivo riconosciuto accademicamente e collegato direttamente a bibliografie autorevoli sulla sincronicità junghiana nazionali ed estere.
+            <h4 className="font-serif font-bold text-black border-b border-slate-100 pb-2">BIBLIOGRAFIA E RICONOSCIMENTI NAZIONALI ED ESTERI</h4>
+            <p className="text-slate-600 leading-relaxed">
+              Le ricerche del Dott. Luca Falace sulla sincronicità junghiana ed il Metodo del Sincronismo Creativo sono citate in prestigiose bibliografie e cataloghi:
             </p>
-            <div className="p-3 bg-amber-50 h-28 border border-amber-200 font-serif italic text-amber-900 flex flex-col justify-between">
-              <div>
-                "Il carteggio originario scambiato con l'ufficio notarile nel 2024 costituisce prova inconfutabile di paternità esclusiva, mai ceduta all'ente giuridico AIC al momento della stesura dello Statuto."
-              </div>
-              <span className="font-mono text-[8.5px] text-right uppercase tracking-wider block">Art. 2544 Codice Civile a tutela dell'ingegno</span>
+            <div className="bg-rose-50/50 p-3 text-slate-800 space-y-2">
+              <p>• <strong>Bibliografie della Sincronicità:</strong> Inserito come saggio di riferimento nello studio comparato dei fenomeni analogici mente-materia.</p>
+              <p>• <strong>Cataloghi Universitari:</strong> Presente negli indici accademici delle tesi sperimentali sui beni culturali e la didattica visiva.</p>
+              <p>• <strong>Riconoscimenti SIAE:</strong> Schedato e censito quale patrimonio creativo della nazione.</p>
             </div>
           </div>
         )
@@ -703,6 +1509,8 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
       case 'sede': return docSede;
       case 'corsi': return docCorsi;
       case 'carteggio': return docCarteggio;
+      case 'notaio': return docNotaio;
+      case 'sintesi': return docSintesi;
     }
   };
 
@@ -743,7 +1551,39 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
     }
   };
 
-  const downloadFullDocument = () => {
+  const downloadFullDocument = async () => {
+    // 1. Prova a scaricare il PDF originale caricato via IndexedDB
+    try {
+      const storedBlob = await getPDF(documentId);
+      if (storedBlob) {
+        const url = URL.createObjectURL(storedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${documentId}_originale.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return;
+      }
+    } catch (e) {
+      console.error("Errore IndexedDB:", e);
+    }
+
+    // 2. Prova a scaricare il PDF originale caricato sul Server
+    if (hasServerPdf) {
+      const a = document.createElement('a');
+      a.href = `/${documentId}.pdf`;
+      a.download = `${documentId}_originale.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    // Se non troviamo alcun file PDF originale caricato, lo spieghiamo chiaramente all'utente
+    alert(`File PDF originale "${documentId}.pdf" non ancora presente nell'applicazione.\n\nDott. Falace, può caricarlo istantaneamente usando il tasto verde "CARICA PDF ORIGINALE" nella barra laterale sinistra!`);
+    
     // Genera un libro HTML stampabile completo e con tipografia lussuosa
     let filename = '';
     let docTitle = '';
@@ -756,7 +1596,7 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
         <div class="letterhead">
           <div class="reg-code">REGISTRO NOTARILE GENERALE - ARCHIVIO GENERALE</div>
           <div class="org-name">FONDAZIONE CULTURALE DELLE ATTIVITÀ INTELLETTIVE CREATIVE (AIC)</div>
-          <p class="notary-mark">CANDIDATO UNICO ALL'INCORPORAZIONE ETS - D.LGS 117/2017</p>
+          <p class="notary-mark">FONDAZIONE TRADIZIONALE DISCIPLINATA DAL CODICE CIVILE</p>
         </div>
 
         <div class="draft-watermark">TESTO INTEGRALE UFFICIALE DEPOSITATO</div>
@@ -793,10 +1633,10 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
                 <li>Capitolo III: Fondi Strutturali di Dotazione ed Accordo col Ministero</li>
               </ul>
             </li>
-            <li><strong>PARTE III - COMPATIBILITÀ ETS & CODICE DEL TERZO SETTORE</strong>
+            <li><strong>PARTE III - REGOLE DELLE FONDAZIONI DEL CODICE CIVILE & OPERE COPERTE DA COPYRIGHT</strong>
               <ul>
-                <li>Adeguamento teorico al Decreto Legislativo 117 del 2017</li>
-                <li>Iscrizione al RUNTS e Trasparenza Gestionale per gli Iscritti</li>
+                <li>Adeguamento teorico alle norme civilistiche sulle fondazioni tradizionali</li>
+                <li>Trasparenza Gestionale per gli Iscritti</li>
               </ul>
             </li>
           </ul>
@@ -808,7 +1648,7 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
         
         <div class="article">
           <h4>ARTICOLO 1: COSTITUZIONE, DENOMINAZIONE E SEDE</h4>
-          <p>L'ente è denominato "Fondazione Culturale delle Attività Intellettive Creative", abbreviato ufficialmente in <strong>FONDAZIONE CULTURALE AIC</strong>. Esso si costituisce a tempo indeterminato mediante Atto Pubblico Notarile a rogito e fissa la sua sede operativa nel territorio nazionale, conformandosi alle prescrizioni di legge vigenti per gli Enti del Terzo Settore.</p>
+          <p>L'ente è denominato "Fondazione Culturale delle Attività Intellettive Creative", abbreviato ufficialmente in <strong>FONDAZIONE CULTURALE AIC</strong>. Esso si costituisce a tempo indeterminato mediante Atto Pubblico Notarile a rogito e fissa la sua sede operativa nel territorio nazionale, conformandosi alle prescrizioni del Codice Civile in materia di fondazioni classiche.</p>
         </div>
 
         <div class="article">
@@ -853,8 +1693,8 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
           <tbody>
             <tr>
               <td>Patrimonio Minimo di Dotazione</td>
-              <td>30.000 € liquidi pre-depositati</td>
-              <td>Vincolato per legge RUNTS</td>
+              <td>Opere e Proprietà Intellettuale del Fondatore</td>
+              <td>Tutela morale e patrimoniale assoluta</td>
             </tr>
             <tr>
               <td>Consiglio d'Amministrazione (CdA)</td>
@@ -869,15 +1709,15 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
             <tr>
               <td>Bilancio e Trasparenza</td>
               <td>Annuale e Pubblicato su portale della Fondazione</td>
-              <td>Trasparenza Terzo Settore ETS</td>
+              <td>Massima trasparenza interna</td>
             </tr>
           </tbody>
         </table>
 
         <div class="page-break"></div>
 
-        <h3>PARTE III: COMPATIBILITÀ ETS & CODICE DEL TERZO SETTORE (D.LGS 117/17)</h3>
-        <p>L'integrazione degli schemi dell'Atto Notarile alle normative degli Enti del Terzo Settore (ETS) assicura alla Fondazione la flessibilità per accedere a donatori e sgravi d'imposta per investimenti culturali, programmi congiunti con enti pubblici per la riqualificazione dei giovani e divulgazione letteraria mondiale dei testi d'ingegno.</p>
+        <h3>PARTE III: COMPATIBILITÀ CON IL CODICE CIVILE & TUTELA DEL DIRITTO D'AUTORE</h3>
+        <p>La conformità con le classiche fondazioni di stampo tradizionale assicura alla Fondazione l'indipendenza e la massima flessibilità per operare autonomamente nello sviluppo di investimenti culturali, programmi congiunti e divulgazione letteraria mondiale dei testi d'ingegno, preservando l'integrità del patrimonio d'autore.</p>
         
         <div class="editorial-seal">
           <p>ATTO REGISTRATO E DEPOSITATO NELL'UFFICIO NOTARILE</p>
@@ -1064,7 +1904,7 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
             <p><strong>#26 FILOSOFIA DELLE ATTIVITÀ INTELLETTIVE CREATIVE</strong><br><small>Cura ed analisi del saggio teorico della Fondazione AIC.</small></p>
             <p><strong>#27 COUNSELING CLINICO-EMOTIVO DI PREVENZIONE</strong><br><small>Sostegno psicofisico e check-point d'ascolto per adolescenti disagiati.</small></p>
             <p><strong>#28 MIMICA ESPRESSIVA SAGGIA</strong><br><small>Teatralizzazione del corpo per superare le rigidità motorie cellulari.</small></p>
-            <p><strong>#29 GRAFICA COORDINATA ED EDITORIA</strong><br><small>Progettazione di brochure informative del Terzo Settore per il Ministero.</small></p>
+            <p><strong>#29 GRAFICA COORDINATA ED EDITORIA</strong><br><small>Progettazione di brochure informative e pubblicazioni d'arte per la Fondazione.</small></p>
             <p><strong>#30 SCULTURA PLASTICA DI BRONZO E MARMO</strong><br><small>Formatura geometrica tridimensionale, fusioni artistiche d'alto ingegno.</small></p>
             <p><strong>#31 INTEGRAZIONE DSA E METODOLOGIE DIDATTICHE</strong><br><small>Processi educativi per ragazzi con specifiche difficoltà d'apprendimento.</small></p>
             <p><strong>#32 INFORMATICA D'AULA E COORDINAMENTO DOCENTI</strong><br><small>Linee guida per la sincronizzazione dei monitor LED e registri della fondazione online.</small></p>
@@ -1226,6 +2066,49 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
           <p class="signature">FIRMATO IN ORIGINALE NOTARILE: DR. LUCA FALACE</p>
         </div>
       `;
+    } else if (documentId === 'notaio') {
+      filename = 'Fondazione_AIC_Libro_Depositato_Notaio.html';
+      docTitle = 'IL LIBRO SULLA FONDAZIONE AIC DI LUCA FALACE (DEPOSITATO DAL NOTAIO)';
+      htmlContent = `
+        <div class="letterhead">
+          <div class="reg-code">REPERTORIO NOTARILE GENERALE - DEPOSITO PRE-ATTO</div>
+          <div class="org-name">IL LIBRO SULLA FONDAZIONE AIC DI LUCA FALACE (DEPOSITATO DAL NOTAIO)</div>
+          <p class="notary-mark">OPERA SCIENTIFICA E COSTITUTIVA ORIGINALE DEPOSITATA DA LUCA FALACE</p>
+        </div>
+
+        <div class="draft-watermark">TESTO INTEGRALE DEPOSITATO PRIMA DELL'ATTO SANCITO</div>
+
+        <h1 class="main-title">IL MANOSCRITTO FONDATIVO DEL DR. LUCA FALACE</h1>
+        <h2 class="sub-title">Bozze, Statuto, Didattica e Copyright depositati prima delle firme finali dell'Atto e Statuto Notarile (Settembre 24, 2024)</h2>
+        
+        <div class="meta-box">
+          <p><strong>Autore Unico Custode:</strong> Dott. Luca Falace (Presidente Onorario Custode)</p>
+          <p><strong>Ufficio Notarile:</strong> Studio Notarile di Deposito Societario ed Enti Culturali</p>
+          <p><strong>Volume di Stima:</strong> Oltre 1000 Pagine di Programma Accademico</p>
+          <p><strong>Licenze & Copyright:</strong> Sincronismo Creativo & Organigramma Nazionale</p>
+        </div>
+
+        <div class="page-break"></div>
+
+        <h3>CAPITOLO SUL CONTROLLO E REGOLAMENTAZIONE PROGETTO ORIGINARIO</h3>
+        <p>I documenti e i capitoli estratti certificano la riserva esclusiva dei diritti d'autore in capo al Dott. Luca Falace prima della ratifica finale. Sotto sono riportate le direttive del Libro Fondativo:</p>
+        
+        <div class="article">
+          <h4>1. COLLEGAMENTI AL PROGETTO ORIGINARIO</h4>
+          <p>La Fondazione ha ereditato l'intera struttura ideativa, didattica e di orientamento dei vecchi canali olistici dell'Opera Celeste e della piattaforma NING, formalizzati nel 2005. Questo garantisce la prosecuzione morale di un'opera cinica e intellettiva pluridecennale.</p>
+        </div>
+
+        <div class="article">
+          <h4>2. L'ATTO E LO STATUTO RIELABORATI DAL NOTAIO</h4>
+          <p>Il manoscritto dimostra che l'Atto e lo Statuto depositati ufficialmente non sono altro che un riassunto tecnico-giuridico delle oltre 1000 pagine del saggio originale redatto interamente da Luca Falace. Alcune annotazioni sono state aggiunte per motivi procedurali, ma intelligenza, titoli, didattica e finalità provengono in via esclusiva dal fondatore.</p>
+        </div>
+
+        <div class="editorial-seal">
+          <p>DELEGATO ALL'ARCHIVIO DI STATO E NOTARILE</p>
+          <p class="seal-mark">REGISTRO ORIGINI INTELLETTUALI NOTARILE © 2024</p>
+          <p class="signature">FIRMATO IN ORIGINALE INCOFUTABILE: DR. LUCA FALACE</p>
+        </div>
+      `;
     }
 
     const fullHtml = `
@@ -1233,7 +2116,15 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
       <html lang="it">
       <head>
         <meta charset="UTF-8">
-        <title>\${docTitle}</title>
+        <title>${docTitle}</title>
+        <script>
+          // Questo script sblocca immediatamente la finestra di dialogo nativa per salvare in formato PDF il documento originale
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 600);
+          };
+        </script>
         <style>
           body {
             font-family: 'Times New Roman', Times, serif;
@@ -1429,7 +2320,7 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
         </style>
       </head>
       <body>
-        \${htmlContent}
+        ${htmlContent}
       </body>
       </html>
     `;
@@ -1454,14 +2345,26 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
       
       {/* Intestazione Player */}
       <div className="bg-slate-900 text-white p-4 border-b border-black flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="bg-[#0066CC] text-white p-1.5 rounded-none font-bold text-xs shrink-0">
-            PDF ATTI
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="bg-[#0066CC] text-white p-1.5 rounded-none font-bold text-xs shrink-0 flex items-center gap-1.5">
+            <FileText className="w-3.5 h-3.5 text-white" />
+            <span>PDF ATTI</span>
           </div>
           <div>
-            <h5 className="font-serif font-black text-xs uppercase tracking-wide text-white leading-tight">
-              {currentDoc.title}
-            </h5>
+            <div className="flex items-center gap-2">
+              <h5 className="font-serif font-black text-xs uppercase tracking-wide text-white leading-tight">
+                {currentDoc.title}
+              </h5>
+              {pdfUrl ? (
+                <span className="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[8px] font-mono px-1 py-0.25 font-bold uppercase tracking-wider">
+                  PDF ORIGINALE ATTIVO
+                </span>
+              ) : (
+                <span className="bg-amber-950 text-amber-400 border border-amber-800 text-[8px] font-mono px-1 py-0.25 font-bold uppercase tracking-wider">
+                  ANTEPRIMA TESTUALE
+                </span>
+              )}
+            </div>
             <span className="text-[10px] text-slate-400 font-mono block">
               {currentDoc.subtitle}
             </span>
@@ -1483,10 +2386,10 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
           <button 
             onClick={downloadFullDocument}
             className="p-1.5 border border-emerald-600 bg-emerald-950/20 text-emerald-400 hover:bg-emerald-900/40 transition-colors text-xs font-mono font-bold flex items-center gap-1 cursor-pointer"
-            title="Scarica il Testo Integrale e Registrazioni completo (.html stampabile in PDF)"
+            title="Genera ed esporta il Volume d'Epoca completo in PDF"
           >
             <Download className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span>SCARICA VOLUME COMPLETO</span>
+            <span>SCARICA VOLUME COMPLETO (PDF)</span>
           </button>
           
           <button
@@ -1544,6 +2447,73 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
                 <p className="text-[9px] text-rose-400 font-mono italic leading-tight">{searchAlert}</p>
               )}
             </form>
+
+            {/* Pannello Autenticazione File PDF (Riservato Dott. Falace) */}
+            <div className="mt-4 pt-3 border-t border-slate-800 space-y-2">
+              <span className="text-[9.5px] font-mono font-bold text-emerald-400 uppercase tracking-widest block flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Gestione Documenti</span>
+              </span>
+              
+              {hasStoredPdf ? (
+                <div className="bg-emerald-950/40 border border-emerald-800 p-2 space-y-2">
+                  <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>PDF Originale Caricato</span>
+                  </span>
+                  <button
+                    onClick={handleDeletePDF}
+                    className="w-full py-1 bg-red-950 hover:bg-red-900 border border-red-800 text-red-400 text-[10px] font-mono font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Rimuovi PDF Locale</span>
+                  </button>
+                </div>
+              ) : hasServerPdf ? (
+                <div className="bg-emerald-950/20 border border-emerald-900 p-2">
+                  <span className="text-[10px] text-emerald-300 font-mono flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                    <span>Server Sincronizzato</span>
+                  </span>
+                </div>
+              ) : (
+                <div className="bg-slate-900 border border-slate-800 p-2 space-y-1.5">
+                  <p className="text-[9px] text-slate-400 leading-normal font-mono">
+                    Carica il PDF originale per sostituire l'anteprima testuale riassuntiva.
+                  </p>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-705 text-[#0066CC] text-[10px] font-mono font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Upload className="w-3 h-3 text-[#0066CC]" />
+                    <span>Carica PDF Vero</span>
+                  </button>
+                  <input 
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </div>
+              )}
+
+              {isUploading && (
+                <div className="text-[9px] text-slate-400 font-mono animate-pulse text-center">
+                  Salvataggio in corso...
+                </div>
+              )}
+
+              {uploadMessage && (
+                <div className={`p-1.5 border text-[9px] font-mono leading-tight ${
+                  uploadMessage.type === 'success' 
+                    ? 'bg-emerald-950/30 border-emerald-800 text-emerald-400' 
+                    : 'bg-rose-950/30 border-rose-800 text-rose-400'
+                }`}>
+                  {uploadMessage.text}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1584,33 +2554,44 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
             </div>
           </div>
 
-          {/* Area di Visualizzazione Pagina */}
-          <div className="flex-1 p-6 sm:p-10 flex items-center justify-center overflow-auto">
-            <div 
-              className="bg-white border shadow-md p-6 sm:p-8 aspect-[1/1.4] w-full max-w-xl transition-all duration-300"
-              style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
-            >
-              <div className="h-full flex flex-col justify-between">
-                
-                {/* Header della Pagina Virtuale */}
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4 shrink-0 text-slate-400 text-[10px]">
-                  <span className="font-serif italic font-bold text-slate-700">Dott. Luca Falace</span>
-                  <span>Volume: {documentId.toUpperCase()}</span>
-                </div>
-
-                {/* Contenuto di testo / immagini renderizzati */}
-                <div className="flex-1 overflow-auto py-2">
-                  {currentPageData.content}
-                </div>
-
-                {/* Footer della Pagina Virtuale */}
-                <div className="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-4 shrink-0 text-slate-400 text-[9px] font-mono">
-                  <span>© Luca Falace tutti i diritti riservati</span>
-                  <span>p. {currentPage} / {currentDoc.totalPages}</span>
-                </div>
-
+          {/* Area di Visualizzazione Pagina o PDF Reale */}
+          <div className="flex-1 p-4 flex items-center justify-center overflow-auto min-h-[400px]">
+            {pdfUrl ? (
+              <div className="w-full h-full min-h-[500px] flex flex-col bg-white shadow-lg border border-slate-300">
+                <iframe
+                  src={pdfUrl}
+                  className="w-full h-full flex-1 border-0 min-h-[600px] rounded-none"
+                  style={{ width: '100%', height: '100%', minHeight: '620px' }}
+                  title={currentDoc.title}
+                />
               </div>
-            </div>
+            ) : (
+              <div 
+                className="bg-white border shadow-md p-6 sm:p-8 aspect-[1/1.4] w-full max-w-xl transition-all duration-300"
+                style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
+              >
+                <div className="h-full flex flex-col justify-between">
+                  
+                  {/* Header della Pagina Virtuale */}
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4 shrink-0 text-slate-400 text-[10px]">
+                    <span className="font-serif italic font-bold text-slate-700">Dott. Luca Falace</span>
+                    <span>Volume: {documentId.toUpperCase()}</span>
+                  </div>
+
+                  {/* Contenuto di testo / immagini renderizzati */}
+                  <div className="flex-1 overflow-auto py-2">
+                    {currentPageData.content}
+                  </div>
+
+                  {/* Footer della Pagina Virtuale */}
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-4 shrink-0 text-slate-400 text-[9px] font-mono">
+                    <span>© Luca Falace tutti i diritti riservati</span>
+                    <span>p. {currentPage} / {currentDoc.totalPages}</span>
+                  </div>
+
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Barra di Navigazione Inferiore */}
@@ -1672,10 +2653,10 @@ export default function AicDocPlayer({ documentId }: AicDocPlayerProps) {
             type="button"
             onClick={downloadFullDocument}
             className="hover:text-emerald-400/90 hover:underline flex items-center gap-1 cursor-pointer text-emerald-400 font-bold"
-            title="Scarica la bozza d'atto notarile integrale (.html / PDF)"
+            title="Genera ed esporta il documento notarile ufficiale in PDF"
           >
             <Download className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Scarica Testo Integrale (.html/PDF)</span>
+            <span>Scarica PDF Originale</span>
           </button>
           <button 
             type="button"
